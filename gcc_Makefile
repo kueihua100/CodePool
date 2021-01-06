@@ -1,0 +1,26 @@
+#
+# A simple Makefile taht use gcc compiler
+#
+
+TARGET = gogo
+LIBS = 
+CXX = g++
+CFLAGS = -g -Wall
+
+.PHONY: default all clean
+
+HEADERS = $(wildcard *.h)
+OBJS = $(patsubst %.c, %.o, $(wildcard *.c))
+OBJS += $(patsubst %.cpp, %.o, $(wildcard *.cpp))
+
+default: $(TARGET)
+all: default
+
+%.o: %.c %.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	$(CXX) $(CFLAGS) $(LIBS) $(OBJS) -o $@
+
+clean:
+	-rm -f $(OBJS) $(TARGET)

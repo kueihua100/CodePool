@@ -1,0 +1,25 @@
+#
+# A simple Makefile taht use C11 compiler
+#
+
+TARGET= gogo
+LIBS= 
+CXX= g++
+CFLAGS= -std=c++11 -g -Wall
+
+.PHONY: default all clean
+
+HEADERS= $(wildcard *.h)
+OBJS= $(patsubst %.cpp, %.o, $(wildcard *.cpp))
+
+default: $(TARGET)
+all: default
+
+%.o: %.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	$(CXX) $(CFLAGS) $(LIBS) $(OBJS) -o $@
+
+clean:
+	-rm -f $(OBJS) $(TARGET) 
