@@ -6,8 +6,11 @@
    that can run at target board.
 
 3. How  to build: 
-   a) put this folder under google code environment
-   b) type "mm" command to build it
-   c) output file is "tunerTest"
+      
+      a) put this folder under google code environment
+      
+      b) type "mm" command to build it
+      
+      c) output file is "tunerTest"
 
 
