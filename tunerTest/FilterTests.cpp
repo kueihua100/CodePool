@@ -35,7 +35,7 @@ void FilterCallback::testFilterDataOutput() {
         }
     }
     mPidFilterOutputCount = 0;
-    ALOGW("[vts] pass and stop");
+    ALOGW("[vts] mFilterId=%d, pass and stop", mFilterId);
 }
 
 void FilterCallback::updateFilterMQ(MQDesc& filterMQDescriptor) {
