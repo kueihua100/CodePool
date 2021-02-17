@@ -17,6 +17,8 @@
 #define LOG_TAG "tunerTest"
 #define LOG_NDEBUG 0
 
+#include <thread>
+#include <chrono>
 #include <utils/Log.h>
 #include <hidl/HidlTransportSupport.h>
 #include <hidl/LegacySupport.h>
@@ -145,6 +147,56 @@ void TunerBroadcastHidlTest::broadcastMultiFilterTest(
     ASSERT_TRUE(mFilterTests.stopFilter(filterId2));
     ASSERT_TRUE(mFilterTests.closeFilter(filterId2));
 
+    ASSERT_TRUE(mDemuxTests.closeDemux());
+    ASSERT_TRUE(mFrontendTests.closeFrontend());
+}
+
+void TunerBroadcastHidlTest::broadcastSingleFilterTest1(
+                                                       FilterConfig filterConf,
+                                                       FrontendConfig frontendConf) {
+    uint32_t feId;
+    uint32_t demuxId;
+    sp<IDemux> demux;
+    uint32_t filterId;
+
+    mFrontendTests.getFrontendIdByType(frontendConf.type, feId);
+    if (feId == INVALID_ID) {
+        // TODO broadcast test on Cuttlefish needs licensed ts input,
+        // these tests are runnable on vendor device with real frontend module
+        // or with manual ts installing and use DVBT frontend.
+        return;
+    }
+    ASSERT_TRUE(mFrontendTests.openFrontendById(feId));
+    ASSERT_TRUE(mFrontendTests.setFrontendCallback());
+    if (mLnbId) {
+        ASSERT_TRUE(mFrontendTests.setLnb(*mLnbId));
+    }
+    ASSERT_TRUE(mDemuxTests.openDemux(demux, demuxId));
+    ASSERT_TRUE(mDemuxTests.setDemuxFrontendDataSource(feId));
+    mFrontendTests.setDemux(demux);
+    mFilterTests.setDemux(demux);
+    ASSERT_TRUE(mFilterTests.openFilterInDemux(filterConf.type, filterConf.bufferSize));
+    ASSERT_TRUE(mFilterTests.getNewlyOpenedFilterId(filterId));
+    ASSERT_TRUE(mFilterTests.configFilter(filterConf.settings, filterId));
+    ASSERT_TRUE(mFilterTests.getFilterMQDescriptor(filterId));
+    ASSERT_TRUE(mFilterTests.startFilter(filterId));
+    // tune test
+    ASSERT_TRUE(mFrontendTests.tuneFrontend(frontendConf, true /*testWithDemux*/));
+    ASSERT_TRUE(filterDataOutputTest(goldenOutputFiles));
+    //sleep for seconds
+    std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
+    do {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::this_thread::sleep_for(5000ms);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        count += elapsed;
+        ALOGE("sleep for %f ms", elapsed);
+    } while (count < 60000ms);
+    
+    ASSERT_TRUE(mFrontendTests.stopTuneFrontend(true /*testWithDemux*/));
+    ASSERT_TRUE(mFilterTests.stopFilter(filterId));
+    ASSERT_TRUE(mFilterTests.closeFilter(filterId));
     ASSERT_TRUE(mDemuxTests.closeDemux());
     ASSERT_TRUE(mFrontendTests.closeFrontend());
 }
@@ -706,7 +758,7 @@ int main(int argc, char **argv) {
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastMultiFilterTest(filterArray[TS_SECTION0], filterArray[TS_SECTION1], filterArray[TS_SECTION2], frontendConf);
 
-/*
+
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
         usleep(1000*1000);
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
@@ -717,8 +769,8 @@ int main(int argc, char **argv) {
 		ALOGV("\n Start (TS_VIDEO1) testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-        aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_VIDEO1], frontendConf);
-*/
+        aBroadcastTest.broadcastSingleFilterTest1(filterArray[TS_VIDEO0], frontendConf);
+
     } else if (case_id == 2) {
         //ATSC3 case
         FrontendConfig frontendConf = frontendArray[ATSC3];

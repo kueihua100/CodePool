@@ -177,6 +177,7 @@ class TunerBroadcastHidlTest /*: public testing::TestWithParam<std::string>*/ {
     AssertionResult filterDataOutputTest(vector<string> goldenOutputFiles);
 
     void broadcastMultiFilterTest(FilterConfig filterConf, FilterConfig filterConf1, FilterConfig filterConf2, FrontendConfig frontendConf);
+    void broadcastSingleFilterTest1(FilterConfig filterConf, FrontendConfig frontendConf);
     void broadcastSingleFilterTest(FilterConfig filterConf, FrontendConfig frontendConf);
     void broadcastSingleFilterTestWithLnb(FilterConfig filterConf, FrontendConfig frontendConf,
                                           LnbConfig lnbConf);
