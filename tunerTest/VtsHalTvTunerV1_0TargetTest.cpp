@@ -134,7 +134,18 @@ void TunerBroadcastHidlTest::broadcastMultiFilterTest(
     ASSERT_TRUE(mFrontendTests.tuneFrontend(frontendConf, true /*testWithDemux*/));
     ASSERT_TRUE(filterDataOutputTest(goldenOutputFiles));
     ASSERT_TRUE(mFrontendTests.stopTuneFrontend(true /*testWithDemux*/));
-
+        
+    //sleep for seconds
+    std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
+    do {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::this_thread::sleep_for(1000ms);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        count += elapsed;
+        ALOGE("sleep for %f ms", count);
+    } while (count < 5000ms);
+    
     //stop SECTION 0
     ASSERT_TRUE(mFilterTests.stopFilter(filterId));
     ASSERT_TRUE(mFilterTests.closeFilter(filterId));
@@ -187,12 +198,12 @@ void TunerBroadcastHidlTest::broadcastSingleFilterTest1(
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(5000ms);
+        std::this_thread::sleep_for(1000ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
-        ALOGE("sleep for %f ms", elapsed);
-    } while (count < 60000ms);
+        ALOGE("sleep for %f ms", count);
+    } while (count < 5000ms);
     
     ASSERT_TRUE(mFrontendTests.stopTuneFrontend(true /*testWithDemux*/));
     ASSERT_TRUE(mFilterTests.stopFilter(filterId));
@@ -232,6 +243,18 @@ void TunerBroadcastHidlTest::broadcastSingleFilterTest(FilterConfig filterConf,
     // tune test
     ASSERT_TRUE(mFrontendTests.tuneFrontend(frontendConf, true /*testWithDemux*/));
     ASSERT_TRUE(filterDataOutputTest(goldenOutputFiles));
+    
+    //sleep for seconds
+    std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
+    do {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::this_thread::sleep_for(1000ms);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        count += elapsed;
+        ALOGE("sleep for %f ms", count);
+    } while (count < 5000ms);
+
     ASSERT_TRUE(mFrontendTests.stopTuneFrontend(true /*testWithDemux*/));
     ASSERT_TRUE(mFilterTests.stopFilter(filterId));
     ASSERT_TRUE(mFilterTests.closeFilter(filterId));
