@@ -212,6 +212,70 @@ void TunerBroadcastHidlTest::broadcastSingleFilterTest1(
     ASSERT_TRUE(mFrontendTests.closeFrontend());
 }
 
+void TunerBroadcastHidlTest::broadcastAVFilterTest1(
+                                                       FilterConfig filterConf1,
+                                                       FilterConfig filterConf2,
+                                                       FrontendConfig frontendConf) {
+    uint32_t feId;
+    uint32_t demuxId;
+    sp<IDemux> demux;
+    uint32_t filterId1, filterId2;
+
+    mFrontendTests.getFrontendIdByType(frontendConf.type, feId);
+    if (feId == INVALID_ID) {
+        // TODO broadcast test on Cuttlefish needs licensed ts input,
+        // these tests are runnable on vendor device with real frontend module
+        // or with manual ts installing and use DVBT frontend.
+        return;
+    }
+    ASSERT_TRUE(mFrontendTests.openFrontendById(feId));
+    ASSERT_TRUE(mFrontendTests.setFrontendCallback());
+    if (mLnbId) {
+        ASSERT_TRUE(mFrontendTests.setLnb(*mLnbId));
+    }
+    ASSERT_TRUE(mDemuxTests.openDemux(demux, demuxId));
+    ASSERT_TRUE(mDemuxTests.setDemuxFrontendDataSource(feId));
+    mFrontendTests.setDemux(demux);
+    mFilterTests.setDemux(demux);
+    //setup filterConf1
+    ASSERT_TRUE(mFilterTests.openFilterInDemux(filterConf1.type, filterConf1.bufferSize));
+    ASSERT_TRUE(mFilterTests.getNewlyOpenedFilterId(filterId1));
+    ASSERT_TRUE(mFilterTests.configFilter(filterConf1.settings, filterId1));
+    ASSERT_TRUE(mFilterTests.getFilterMQDescriptor(filterId1));
+    ASSERT_TRUE(mFilterTests.startFilter(filterId1));
+    //setup filterConf2
+    ASSERT_TRUE(mFilterTests.openFilterInDemux(filterConf2.type, filterConf2.bufferSize));
+    ASSERT_TRUE(mFilterTests.getNewlyOpenedFilterId(filterId2));
+    ASSERT_TRUE(mFilterTests.configFilter(filterConf2.settings, filterId2));
+    ASSERT_TRUE(mFilterTests.getFilterMQDescriptor(filterId2));
+    ASSERT_TRUE(mFilterTests.startFilter(filterId2));
+
+    // tune test
+    ASSERT_TRUE(mFrontendTests.tuneFrontend(frontendConf, true /*testWithDemux*/));
+    ASSERT_TRUE(filterDataOutputTest(goldenOutputFiles));
+    //sleep for seconds
+    std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
+    do {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::this_thread::sleep_for(1000ms);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        count += elapsed;
+        ALOGE("sleep for %f ms", count);
+    } while (count < 5000ms);
+    
+    ASSERT_TRUE(mFrontendTests.stopTuneFrontend(true /*testWithDemux*/));
+    //stop filterConf2
+    ASSERT_TRUE(mFilterTests.stopFilter(filterId1));
+    ASSERT_TRUE(mFilterTests.closeFilter(filterId1));
+    //stop filterConf2
+    ASSERT_TRUE(mFilterTests.stopFilter(filterId2));
+    ASSERT_TRUE(mFilterTests.closeFilter(filterId2));
+
+    ASSERT_TRUE(mDemuxTests.closeDemux());
+    ASSERT_TRUE(mFrontendTests.closeFrontend());
+}
+
 void TunerBroadcastHidlTest::broadcastSingleFilterTest(FilterConfig filterConf,
                                                        FrontendConfig frontendConf) {
     uint32_t feId;
@@ -789,10 +853,11 @@ int main(int argc, char **argv) {
 
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-		ALOGV("\n Start (TS_VIDEO1) testing ... \n");
+		ALOGV("\n Start (media filter) testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-        aBroadcastTest.broadcastSingleFilterTest1(filterArray[TS_VIDEO0], frontendConf);
+        //aBroadcastTest.broadcastSingleFilterTest1(filterArray[TS_VIDEO0], frontendConf);
+        aBroadcastTest.broadcastAVFilterTest1(filterArray[TS_VIDEO0], filterArray[TS_AUDIO0], frontendConf);
 
     } else if (case_id == 2) {
         //ATSC3 case

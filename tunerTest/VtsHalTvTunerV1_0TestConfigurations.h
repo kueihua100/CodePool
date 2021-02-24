@@ -324,7 +324,7 @@ inline void initFilterConfig() {
     filterArray[TS_AUDIO0].type.mainType = DemuxFilterMainType::TS;
     filterArray[TS_AUDIO0].type.subType.tsFilterType(DemuxTsFilterType::AUDIO);
     filterArray[TS_AUDIO0].bufferSize = FMQ_SIZE_16M;
-    filterArray[TS_AUDIO0].settings.ts().tpid = 256;
+    filterArray[TS_AUDIO0].settings.ts().tpid = 52;
     filterArray[TS_AUDIO0].settings.ts().filterSettings.av({.isPassthrough = false});
     // TS PES filter setting
     filterArray[TS_PES0].type.mainType = DemuxFilterMainType::TS;
