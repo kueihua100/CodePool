@@ -123,7 +123,7 @@ bool FilterCallback::dumpAvData(DemuxFilterMediaEvent event) {
     }
     uint8_t output[length + 1];
     memcpy(output, buffer, length);
-    ALOGE("[%s] dataId= %d, length= %d", __FUNCTION__, dataId, length);
+    ALOGE("[%s] dataId= %lld, length= 0x%x, pts=0x%llx", __FUNCTION__, dataId, length, event.pts);
     // print buffer and check with golden output.
     EXPECT_TRUE(mFilter->releaseAvHandle(handle, dataId) == Result::SUCCESS);
     return true;
