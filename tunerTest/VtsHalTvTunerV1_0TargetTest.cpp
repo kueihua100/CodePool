@@ -825,14 +825,16 @@ int main(int argc, char **argv) {
         atscSettings.frequency = frequency;
         frontendConf.settings.atsc(atscSettings);
 		//aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_VIDEO1], frontendConf);
-
+#if 0		
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n Start TS_SECTION0 testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_SECTION0], frontendConf);
-		
+#endif
+
+#if 0
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
         usleep(1000*1000);
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
@@ -844,8 +846,9 @@ int main(int argc, char **argv) {
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastMultiFilterTest(filterArray[TS_SECTION0], filterArray[TS_SECTION1], filterArray[TS_SECTION2], frontendConf);
+#endif
 
-
+#if 1
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
         usleep(1000*1000);
         ALOGV("\n\n\n\n SLEEP 1 second... \n\n\n\n");
@@ -858,7 +861,7 @@ int main(int argc, char **argv) {
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         //aBroadcastTest.broadcastSingleFilterTest1(filterArray[TS_VIDEO0], frontendConf);
         aBroadcastTest.broadcastAVFilterTest1(filterArray[TS_VIDEO0], filterArray[TS_AUDIO0], frontendConf);
-
+#endif
     } else if (case_id == 2) {
         //ATSC3 case
         FrontendConfig frontendConf = frontendArray[ATSC3];
