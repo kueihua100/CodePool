@@ -72,7 +72,7 @@ void FilterCallback::filterThreadLoop(DemuxFilterEvent& /* event */) {
 bool FilterCallback::readFilterEventData() {
     bool result = false;
     DemuxFilterEvent filterEvent = mFilterEvent;
-    ALOGW("[vts] reading from filter FMQ or buffer %d", mFilterId);
+    ALOGW("[vts] reading from filter FMQ or buffer: filterId=%d, eventSize=%d", mFilterId, filterEvent.events.size());
     // todo separate filter handlers
     for (int i = 0; i < filterEvent.events.size(); i++) {
         switch (mFilterEventType) {
@@ -83,7 +83,7 @@ bool FilterCallback::readFilterEventData() {
                 mDataLength = filterEvent.events[i].pes().dataLength;
                 break;
             case FilterEventType::MEDIA:
-                return dumpAvData(filterEvent.events[i].media());
+                dumpAvData(filterEvent.events[i].media());
             case FilterEventType::RECORD:
                 break;
             case FilterEventType::MMTPRECORD:
