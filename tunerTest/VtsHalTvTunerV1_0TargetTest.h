@@ -179,6 +179,9 @@ class TunerBroadcastHidlTest /*: public testing::TestWithParam<std::string>*/ {
     void broadcastMultiFilterTest(FilterConfig filterConf, FilterConfig filterConf1, FilterConfig filterConf2, FrontendConfig frontendConf);
     void broadcastSingleFilterTest1(FilterConfig filterConf, FrontendConfig frontendConf);
     void broadcastAVFilterTest1(FilterConfig filterConf1, FilterConfig filterConf2, FrontendConfig frontendConf);
+    void broadcastallFilterTest(FilterConfig filterConf, FilterConfig filterConf1, FilterConfig filterConf2,
+                                                FilterConfig filterConf3, FilterConfig filterConf4, FrontendConfig frontendConf);
+
 
     void broadcastSingleFilterTest(FilterConfig filterConf, FrontendConfig frontendConf);
     void broadcastSingleFilterTestWithLnb(FilterConfig filterConf, FrontendConfig frontendConf,

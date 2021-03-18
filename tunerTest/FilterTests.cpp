@@ -71,6 +71,8 @@ void FilterCallback::filterThreadLoop(DemuxFilterEvent& /* event */) {
 
 bool FilterCallback::readFilterEventData() {
     bool result = false;
+    char filterName[20];
+    memset(filterName, 0, sizeof(filterName));
     DemuxFilterEvent filterEvent = mFilterEvent;
     ALOGW("[vts][%s] reading from filter FMQ or buffer: filterId=%d, eventSize=%d", __FUNCTION__, mFilterId, filterEvent.events.size());
     // todo separate filter handlers
@@ -78,12 +80,14 @@ bool FilterCallback::readFilterEventData() {
         switch (mFilterEventType) {
             case FilterEventType::SECTION:
                 mDataLength = filterEvent.events[i].section().dataLength;
+                strncpy(filterName, "SECTION", sizeof(filterName));
                 break;
             case FilterEventType::PES:
                 mDataLength = filterEvent.events[i].pes().dataLength;
                 break;
             case FilterEventType::MEDIA:
                 dumpAvData(filterEvent.events[i].media());
+                strncpy(filterName, "MEDIA_AV", sizeof(filterName));
             case FilterEventType::RECORD:
                 break;
             case FilterEventType::MMTPRECORD:
@@ -99,7 +103,7 @@ bool FilterCallback::readFilterEventData() {
         mDataOutputBuffer.resize(mDataLength);
         result = mFilterMQ->read(mDataOutputBuffer.data(), mDataLength);
         EXPECT_TRUE(result);// << "can't read from Filter MQ";
-	ALOGE("[vts][%s] read MQ buffer, filterId=%d, len=%d, result=%d", __FUNCTION__, mFilterId, mDataLength, result);
+	    ALOGE("[vts][%s] (%s) read MQ buffer, filterId=%d, len=%d, result=%d", __FUNCTION__, filterName, mFilterId, mDataLength, result);
 
         /*for (int i = 0; i < mDataLength; i++) {
             EXPECT_TRUE(goldenDataOutputBuffer[i] == mDataOutputBuffer[i]) << "data does not match";
