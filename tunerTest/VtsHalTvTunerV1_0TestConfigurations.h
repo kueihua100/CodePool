@@ -312,7 +312,7 @@ inline void initFilterConfig() {
     filterArray[TS_VIDEO0].type.mainType = DemuxFilterMainType::TS;
     filterArray[TS_VIDEO0].type.subType.tsFilterType(DemuxTsFilterType::VIDEO);
     filterArray[TS_VIDEO0].bufferSize = FMQ_SIZE_16M;
-    filterArray[TS_VIDEO0].settings.ts().tpid = 49;
+    filterArray[TS_VIDEO0].settings.ts().tpid = 48; //48; //49;
     filterArray[TS_VIDEO0].settings.ts().filterSettings.av({.isPassthrough = false});
     
     filterArray[TS_VIDEO1].type.mainType = DemuxFilterMainType::TS;
@@ -324,7 +324,7 @@ inline void initFilterConfig() {
     filterArray[TS_AUDIO0].type.mainType = DemuxFilterMainType::TS;
     filterArray[TS_AUDIO0].type.subType.tsFilterType(DemuxTsFilterType::AUDIO);
     filterArray[TS_AUDIO0].bufferSize = FMQ_SIZE_16M;
-    filterArray[TS_AUDIO0].settings.ts().tpid = 52;
+    filterArray[TS_AUDIO0].settings.ts().tpid = 64; //64; //52;
     filterArray[TS_AUDIO0].settings.ts().filterSettings.av({.isPassthrough = false});
     // TS PES filter setting
     filterArray[TS_PES0].type.mainType = DemuxFilterMainType::TS;

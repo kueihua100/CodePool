@@ -139,7 +139,7 @@ void TunerBroadcastHidlTest::broadcastMultiFilterTest(
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(1000ms);
+        std::this_thread::sleep_for(100ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
@@ -198,7 +198,7 @@ void TunerBroadcastHidlTest::broadcastSingleFilterTest1(
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(1000ms);
+        std::this_thread::sleep_for(100ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
@@ -257,7 +257,7 @@ void TunerBroadcastHidlTest::broadcastAVFilterTest1(
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(1000ms);
+        std::this_thread::sleep_for(100ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
@@ -339,7 +339,7 @@ void TunerBroadcastHidlTest::broadcastallFilterTest(FilterConfig filterConf, Fil
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(1000ms);
+        std::this_thread::sleep_for(100ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
@@ -404,7 +404,7 @@ void TunerBroadcastHidlTest::broadcastSingleFilterTest(FilterConfig filterConf,
     std::chrono::duration<double, std::milli> count = std::chrono::duration<double, std::milli>(0.0);
     do {
         auto start = std::chrono::high_resolution_clock::now();
-        std::this_thread::sleep_for(1000ms);
+        std::this_thread::sleep_for(100ms);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         count += elapsed;
