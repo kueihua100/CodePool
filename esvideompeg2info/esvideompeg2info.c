@@ -166,7 +166,8 @@ int main(int argc, char *argv[])
 	
 	FILE* file_es;
 	unsigned char es_header[HEADER_MAX_SIZE];
-	
+	int found_video_seq_hdr = 0;
+    
 	/* Open es file */
 	if (argc > 1) {
 		file_es = fopen(argv[1], "rb");
@@ -200,14 +201,18 @@ int main(int argc, char *argv[])
 		if (es_header[0] == 0x00 && es_header[1] == 0x00 && es_header[2] == 0x01 && es_header[3] == 0x00) { /* Picture start header */
 
 			frame_counter++;
-			frame_size = total_byte_count - previous_byte_count;
-			if (frame_size > max_frame_size) {
-				max_frame_size = frame_size;
-			}
-			previous_byte_count = total_byte_count;
-			
-			fprintf(stdout, "frame size: 0x%x\n", frame_size);
-
+            if (found_video_seq_hdr == 0) {
+                frame_size = total_byte_count - previous_byte_count;
+                if (frame_size > max_frame_size) {
+                    max_frame_size = frame_size;
+                }
+                previous_byte_count = total_byte_count;
+                
+                fprintf(stdout, "frame size: 0x%x\n", frame_size);
+            } else {
+                found_video_seq_hdr = 0;
+            }
+            
 			fprintf(stdout, "Postion %llu, picture %d start header: ", total_byte_count, frame_counter);
 			byte_read = fread(es_header, 1, 4, file_es);
 	
@@ -225,7 +230,16 @@ int main(int argc, char *argv[])
 
 			
 		} else if (es_header[0] == 0x00 && es_header[1] == 0x00 && es_header[2] == 0x01 && es_header[3] == 0xB3) { /* Sequence video header */
-
+#if 1
+            frame_size = total_byte_count - previous_byte_count;
+            if (frame_size > max_frame_size) {
+				max_frame_size = frame_size;
+			}
+			previous_byte_count = total_byte_count;
+            fprintf(stdout, "frame size: 0x%x\n", frame_size);
+            fprintf(stdout, "Postion %llu, Sequence video header found ", total_byte_count);
+            found_video_seq_hdr = 1;
+#endif
 			byte_read = fread(es_header, 1, 8, file_es);
 
 			horizontal_size = (es_header[0] << 4) | ((es_header[1] & 0xF0) >> 4);
