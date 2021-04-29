@@ -920,7 +920,7 @@ int main(int argc, char **argv) {
 
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-		ALOGV("\n Start TS_SECTION0 testing ... \n");
+		ALOGV("\n Start ATSC TS_SECTION0 testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_SECTION0], frontendConf);
@@ -938,7 +938,7 @@ int main(int argc, char **argv) {
         
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-		ALOGV("\n Start (TS_SECTION0 + TS_SECTION1 + TS_SECTION2) testing ... \n");
+		ALOGV("\n Start ATSC (TS_SECTION0 + TS_SECTION1 + TS_SECTION2) testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastMultiFilterTest(filterArray[TS_SECTION0], filterArray[TS_SECTION1], filterArray[TS_SECTION2], frontendConf);
@@ -956,7 +956,7 @@ int main(int argc, char **argv) {
 
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-		ALOGV("\n Start (media filter) testing ... \n");
+		ALOGV("\n Start ATSC (media filter) testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         //aBroadcastTest.broadcastSingleFilterTest1(filterArray[TS_VIDEO0], frontendConf);
@@ -975,11 +975,26 @@ int main(int argc, char **argv) {
 
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
-		ALOGV("\n Start (section + media filter) testing ... \n");
+		ALOGV("\n Start ATSC (section + media filter) testing ... \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
 		ALOGV("\n ----------------------------------------------------------------------------- \n");
         aBroadcastTest.broadcastallFilterTest(filterArray[TS_SECTION0], filterArray[TS_SECTION1], filterArray[TS_SECTION2], filterArray[TS_VIDEO0], filterArray[TS_AUDIO0], frontendConf);
     } else if (case_id == 100) {
+        //DVBT case
+        //FrontendConfig frontendConf = frontendArray[DVBT];
+        //FrontendDvbtSettings dvbtSettings = frontendConf.settings.dvbt();
+        //dvbtSettings.frequency = frequency;
+        //frontendConf.settings.dvbt(dvbtSettings);
+		//aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_VIDEO1], frontendConf);
+
+		ALOGV("\n ----------------------------------------------------------------------------- \n");
+		ALOGV("\n ----------------------------------------------------------------------------- \n");
+		ALOGV("\n Start DVBT TS_SECTION0 testing ... \n");
+		ALOGV("\n ----------------------------------------------------------------------------- \n");
+		ALOGV("\n ----------------------------------------------------------------------------- \n");
+        //aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_SECTION0], frontendConf);
+        aBroadcastTest.broadcastSingleFilterTest(filterArray[TS_SECTION0], frontendArray[DVBT]);
+    } else if (case_id == 200) {
         //ATSC3 case
         FrontendConfig frontendConf = frontendArray[ATSC3];
         FrontendAtsc3Settings atsc3Settings = frontendConf.settings.atsc3();
