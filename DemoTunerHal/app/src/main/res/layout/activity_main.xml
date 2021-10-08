@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+
+    <Button
+        android:id="@+id/PlayTv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
+        android:text="Play TV" />
+
+    <Button
+        android:id="@+id/StopPlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="80dp"
+        android:text="Stop Play" />
+
+    <Button
+        android:id="@+id/PlayVideo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="140dp"
+        android:text="Play Video" />
+
+    <TextView
+        android:id="@+id/DemoTunerHal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="Demo Tuner Hal"
+        android:textColor="@android:color/holo_blue_bright" />
+
+    <TextureView
+        android:id="@+id/TvVideoView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+        
+</FrameLayout>
+
