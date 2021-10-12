@@ -4,6 +4,8 @@ import android.animation.TimeAnimator;
 import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
+import android.media.MediaFormat;
+
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -15,9 +17,15 @@ import android.view.TextureView;
 import android.widget.TextView;
 
 import java.io.IOException;
+import java.util.concurrent.Executor;
+import java.nio.ByteBuffer;
+
+import android.media.tv.tuner.*;
+import android.media.tv.tuner.filter.*;
+import android.media.tv.tuner.frontend.*;
 
 class TunerHalControl {
-    private static final String TAG = "TunerHalControl";
+    private static final String TAG = "DemoTunerHal-ctrl";
 
     private static final int MSG_SET_TV_TUNER = 0;
     private static final int MSG_PLAY_TV_CHANNEL = 1;
@@ -34,11 +42,8 @@ class TunerHalControl {
         private TimeAnimator mTimeAnimator = null;
         private MediaExtractor mExtractor = null;
         private MediaCodecWrapper mCodecWrapper;
-        //private Tuner mTuner;
-
-        private static final int CASE_PLAY_TV = 0;
-        private static final int CASE_PLAY_FILE = 1;
-        private int playCase = CASE_PLAY_TV;
+        private Tuner mTuner;
+        private Filter mVideoFilter;
 
         public MyHadler(Looper looper) {
             super(looper);
@@ -70,15 +75,17 @@ class TunerHalControl {
 
         }
 
+        //------------------------------------------------------------
         public void onPlayTv() {
             Log.i(TAG, "onPlayTv()");
-            playCase = CASE_PLAY_TV;
+            openTuner();
+            setVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
+            startTune();
         }
 
         public void onPlayVideo() {
             Log.i(TAG, "onPlayVideo()");
 
-            playCase = CASE_PLAY_FILE;
             mTimeAnimator = new TimeAnimator();
             if (mTimeAnimator == null) {
                 throw new NullPointerException("Create TimeAnimator failed!!");
@@ -102,7 +109,12 @@ class TunerHalControl {
             if (mCodecWrapper != null ) {
                 mCodecWrapper.stopAndRelease();
                 mCodecWrapper = null;
+                //mExtractor.release();
+            }
+
+            if (mExtractor != null) {
                 mExtractor.release();
+                mExtractor = null;
             }
         }
 
@@ -186,6 +198,7 @@ class TunerHalControl {
                             mCodecWrapper.stopAndRelease();
                             mCodecWrapper = null;
                             mExtractor.release();
+                            mExtractor = null;
                         } else if (out_bufferInfo.presentationTimeUs / 1000 < totalTime) {
                             // Pop the sample off the queue and send it to {@link Surface}
                             mCodecWrapper.popSample(true);
@@ -207,16 +220,166 @@ class TunerHalControl {
             return mContext.getPackageManager().hasSystemFeature("android.hardware.tv.tuner");
         }
 
+        private Executor getExecutor() {
+            return Runnable::run;
+        }
+
+        private FrontendSettings createAtscFrontendSettings(int frequency) {
+            Log.d(TAG, "-----tune to frequency: " + frequency);
+
+            return AtscFrontendSettings
+                    .builder()
+                    .setFrequency(frequency)
+                    .setModulation(AtscFrontendSettings.MODULATION_AUTO)
+                    .build();
+        }
+
+        private FilterConfiguration createTsFilterConfiguration(int pid) {
+            Log.d(TAG, "-----ts PID: " + pid);
+
+            Settings settings = AvSettings
+                    .builder(Filter.TYPE_TS, false)
+                    .setPassthrough(false)
+                    .build();
+
+            return TsFilterConfiguration
+                    .builder()
+                    .setTpid(481)
+                    .setSettings(settings)
+                    .build();
+        }
+
         private void openTuner() {
             if (!hasTuner()) {
                 Log.e(TAG, "openTuner() failed, check feature: android.hardware.tv.tuner");
                 return;
             }
-
+            //new Tuner
+            mTuner = new Tuner(mContext, null, 100);
+            //set tuner event listener
+            mTuner.setOnTuneEventListener(getExecutor(), new OnTuneEventListener() {
+                @Override
+                public void onTuneEvent(int tuneEvent) {
+                    switch (tuneEvent) {
+                        case OnTuneEventListener.SIGNAL_LOCKED:
+                            Log.d(TAG, "[onTuneEvent]: signal locked");
+                            break;
+                        case OnTuneEventListener.SIGNAL_LOST_LOCK:
+                            Log.d(TAG, "[onTuneEvent]: signal lost");
+                            break;
+                        case OnTuneEventListener.SIGNAL_NO_SIGNAL:
+                            Log.d(TAG, "[onTuneEvent]: no signal");
+                            break;
+                        default:
+                            Log.d(TAG, "[onTuneEvent] " + tuneEvent);
+                            break;
+                    }
+                }
+            });
         }
 
         private void closeTuner() {
+            if (mTuner != null) {
+              mTuner.close();
+              mTuner = null;
+            }
+        }
 
+        private void startTune() {
+            FrontendSettings settings = createAtscFrontendSettings(195000000);
+            mTuner.tune(settings);
+        }
+
+        private FilterCallback getFilterCallback() {
+            return new FilterCallback() {
+                @Override
+                public void onFilterEvent(Filter filter, FilterEvent[] events) {
+                    for (FilterEvent e : events) {
+                        if (e instanceof MediaEvent) {
+                            //queue to MediaCodec
+                            queueInput((MediaEvent)e);
+                        } else if (e instanceof SectionEvent) {
+                            //testSectionEvent(filter, (SectionEvent) e);
+                        } else if (e instanceof TemiEvent) {
+                            //testTemiEvent(filter, (TemiEvent) e);
+                        } else if (e instanceof TsRecordEvent) {
+                            //testTsRecordEvent(filter, (TsRecordEvent) e);
+                        }
+                    }
+                }
+                @Override
+                public void onFilterStatusChanged(Filter filter, int status) {}
+            };
+        }
+
+        private void setVideoFilter(String mime) {
+            //stop first
+            onStopPlay();
+
+            //clear before new setup
+            if (mVideoFilter != null) {
+                mVideoFilter.flush();
+                mVideoFilter.stop();
+                mVideoFilter.close();
+                mVideoFilter = null;
+            }
+
+            MediaFormat mf = MediaFormat.createVideoFormat(mime, 1920, 1080); //MIMETYPE_VIDEO_VP9 : MIMETYPE_VIDEO_MPEG2
+            Log.d(TAG, "[setVideoFilter]: mime:" + mime + "media format:" + mf.toString());
+
+            try {
+                mCodecWrapper = MediaCodecWrapper.fromVideoFormat(mf, new Surface(mVideoView.getSurfaceTexture()));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            //open filter
+            mVideoFilter = mTuner.openFilter(
+                            Filter.TYPE_TS,
+                            Filter.SUBTYPE_VIDEO,
+                            2 * 1024 * 1024,
+                            getExecutor(),
+                            getFilterCallback());
+            //------------------------------------------------------
+            //Settings settings = AvSettings
+            //        .builder(Filter.TYPE_TS, false)
+            //        .setPassthrough(false)
+            //        .build();
+
+            //FilterConfiguration config = TsFilterConfiguration
+            //        .builder()
+            //        .setTpid(481)
+            //        .setSettings(settings)
+            //        .build();
+            //------------------------------------------------------
+            FilterConfiguration config = createTsFilterConfiguration(481);
+
+            //int filterId = mVideoFilter.getId();
+            mVideoFilter.configure(config);
+            mVideoFilter.start();
+        }
+
+        public void queueInput(MediaEvent me) {
+            mCodecWrapper.popSample(true);
+
+            MediaCodec.LinearBlock linearBlock = me.getLinearBlock();
+            ByteBuffer esBuffer = linearBlock.map();
+
+            Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+            Log.d(TAG, " me.getDataLength()= " + me.getDataLength());
+            Log.d(TAG, " me.getPts()= " + me.getPts());
+
+            try {
+                boolean res = mCodecWrapper.writeSample(esBuffer, null, me.getPts(), 0);
+                Log.d(TAG, " mCodecWrapper.writeSample()= " + res);
+            } catch (MediaCodecWrapper.WriteException e) {
+            }
+
+            linearBlock.recycle();
+            me.release();
+
+            MediaCodec.BufferInfo out_bufferInfo = new MediaCodec.BufferInfo();
+            mCodecWrapper.peekSample(out_bufferInfo);
         }
     }
 

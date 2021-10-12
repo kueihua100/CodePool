@@ -9,7 +9,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-    private static final String TAG = "DemoTunerHal";
+    private static final String TAG = "DemoTunerHal-main";
     private TextView mTextView;
     private TextureView mVideoView;
     private TunerHalControl mTunerHalCtrl;

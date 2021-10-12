@@ -33,7 +33,7 @@ import java.util.Queue;
  * Simplifies the MediaCodec interface by wrapping around the buffer processing operations.
  */
 public class MediaCodecWrapper {
-    private static final String TAG = "MediaCodecWrapper";
+    private static final String TAG = "DemoTunerHal-codecWrapper";
 
     // Handler to use for {@code OutputSampleListener} and {code OutputFormatChangedListener}
     // callbacks
@@ -373,7 +373,7 @@ public class MediaCodecWrapper {
 
     }
 
-    private class WriteException extends Throwable {
+    public class WriteException extends Throwable {
         private WriteException(final String detailMessage) {
             super(detailMessage);
         }
