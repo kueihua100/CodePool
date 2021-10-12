@@ -31,6 +31,7 @@ class TunerHalControl {
     private static final int MSG_PLAY_TV_CHANNEL = 1;
     private static final int MSG_PLAY_VIDEO_FILE = 2;
     private static final int MSG_STOP_PLAY = 3;
+    private static final int MSG_SKIP_FIRST_FRAME = 4;
 
     private final HandlerThread mHandlerThread;
     private final Handler mHandler;
@@ -44,6 +45,7 @@ class TunerHalControl {
         private MediaCodecWrapper mCodecWrapper;
         private Tuner mTuner;
         private Filter mVideoFilter;
+        private boolean skipFirstFrame = true;
 
         public MyHadler(Looper looper) {
             super(looper);
@@ -67,6 +69,13 @@ class TunerHalControl {
                 case MSG_STOP_PLAY:
                     Log.d(TAG, "case MSG_STOP_PLAY");
                     onStopPlay();
+                    break;
+                case MSG_SKIP_FIRST_FRAME:
+                    Log.d(TAG, "case MSG_SKIP_FIRST_FRAME");
+                    if (skipFirstFrame == false) {
+                        skipFirstFrame = true;
+                    }
+                    Log.i(TAG, "--- skipFirstFrame=" + skipFirstFrame);
                     break;
                 default:
                     Log.d(TAG, "Why in [default] case??");
@@ -176,8 +185,15 @@ class TunerHalControl {
                         if (!isEos) {
                             // Try to submit the sample to the codec and if successful advance the
                             // extractor to the next available sample to read.
-                            boolean result = mCodecWrapper.writeSample(mExtractor, false,
-                                    mExtractor.getSampleTime(), mExtractor.getSampleFlags());
+                            boolean result = false;
+                            if (skipFirstFrame == true) {
+                                Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
+                                skipFirstFrame = false;
+                                result = true;
+                            } else {
+                                result = mCodecWrapper.writeSample(mExtractor, false,
+                                        mExtractor.getSampleTime(), mExtractor.getSampleFlags());
+                            }
 
                             if (result) {
                                 // Advancing the extractor is a blocking operation and it MUST be
@@ -414,5 +430,11 @@ class TunerHalControl {
         mVideoView = view;
         mContext = null;
         mHandler.sendEmptyMessage(MSG_STOP_PLAY);
+    }
+
+    public void skipFirstFrame(TextureView view) {
+        mVideoView = view;
+        mContext = view.getContext();
+        mHandler.sendEmptyMessage(MSG_SKIP_FIRST_FRAME);
     }
 }

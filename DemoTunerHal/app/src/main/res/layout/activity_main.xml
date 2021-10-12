@@ -20,6 +20,14 @@
         android:text="Stop Play" />
 
     <Button
+        android:id="@+id/Skip1stFrame"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="160dp"
+        android:layout_marginTop="80dp"
+        android:text="Skip 1st Frame" />
+
+    <Button
         android:id="@+id/PlayVideo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

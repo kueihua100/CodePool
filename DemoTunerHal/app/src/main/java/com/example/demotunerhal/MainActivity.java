@@ -64,5 +64,18 @@ public class MainActivity extends Activity {
                     }
                 }
         );
+
+        Button skipFirstFrameButton = findViewById(R.id.Skip1stFrame);
+        skipFirstFrameButton.setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        Log.d(TAG, "Skip 1st Frame Button clicked!!");
+                        mTextView.setText("Skip 1st Frame...");
+                        mTunerHalCtrl.skipFirstFrame(mVideoView);
+                    }
+                }
+        );
+
     }
 }
