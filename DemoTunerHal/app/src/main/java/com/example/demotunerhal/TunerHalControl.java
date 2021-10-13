@@ -45,7 +45,7 @@ class TunerHalControl {
         private MediaCodecWrapper mCodecWrapper;
         private Tuner mTuner;
         private Filter mVideoFilter;
-        private boolean skipFirstFrame = true;
+        private boolean skipFirstFrame = false;
 
         public MyHadler(Looper looper) {
             super(looper);
@@ -134,6 +134,7 @@ class TunerHalControl {
             String uri = "android.resource://"
                     + mContext.getPackageName() + "/"
                     + R.raw.tv_ts;
+            uri = "/data/local/tmp/atsc_cc.ts";
             Log.i(TAG, "[startPlayback] Play fixed file:" + uri);
 
             Uri videoUri = Uri.parse(uri);

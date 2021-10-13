@@ -27,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Locale;
 import java.util.Queue;
+import java.lang.String;
 //import android.util.Log;
 
 /**
@@ -255,12 +256,17 @@ public class MediaCodecWrapper {
             if (size <= 0) {
                 flags |= MediaCodec.BUFFER_FLAG_END_OF_STREAM;
             }
-
+            //
+            int tem_ref = (buffer.get(4) << 2) | ((buffer.get(5) & 0xC0) >> 6);
+            int pic_type = (buffer.get(5) & 0x38) >> 3;
+            String hdrData = String.format(" header_byte[%x-%x-%x-%x] tmp_ref=%d, pic_type=%d", buffer.get(0), buffer.get(1), buffer.get(2), buffer.get(3), tem_ref, pic_type);
+            Log.i(TAG, "[writeSample]" + hdrData);
+            String str = String.format(" pts=0x%x, size=0x%x", presentationTimeUs, size);
+            Log.i(TAG, "[writeSample]"  + str);
             // Submit the buffer to the codec for decoding. The presentationTimeUs
             // indicates the position (play time) for the current sample.
             if (!isSecure) {
                 mDecoder.queueInputBuffer(index, 0, size, presentationTimeUs, flags);
-                Log.i(TAG, "video pts=" + presentationTimeUs);
             } else {
                 extractor.getSampleCryptoInfo(sCryptoInfo);
                 mDecoder.queueSecureInputBuffer(index, 0, sCryptoInfo, presentationTimeUs, flags);
