@@ -39,6 +39,11 @@ class TunerHalControl {
     private Context mContext = null;
     private boolean mIsPlayThread = true;
 
+    private static final int FILTER_BUFFER_SIZE = 2 * 1024 * 1024;
+    private static final int AUDIO_TPID = 484;
+    private static final int VIDEO_TPID = 481;
+    private static final int FREQUENCY = 195000000;
+
     private class MyHadler extends Handler {
         private TimeAnimator mTimeAnimator = null;
         private MediaExtractor mExtractor = null;
@@ -46,7 +51,7 @@ class TunerHalControl {
         private Tuner mTuner;
         private Filter mVideoFilter;
         private boolean skipFirstFrame = false;
-        private Thread mPlaybackThread;
+        private Thread mPlaybackThread = null;
 
 
         public MyHadler(Looper looper) {
@@ -87,13 +92,6 @@ class TunerHalControl {
         }
 
         //------------------------------------------------------------
-        public void onPlayTv() {
-            Log.i(TAG, "onPlayTv()");
-            openTuner();
-            setVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
-            startTune();
-        }
-
         public void onPlayVideo() {
             Log.i(TAG, "onPlayVideo(): mIsPlayThread=" + mIsPlayThread);
 
@@ -332,6 +330,14 @@ class TunerHalControl {
             }
         }
 
+
+    //------------------------------------------------------------
+        public void onPlayTv() {
+            Log.i(TAG, "onPlayTv()");
+            openTuner(FREQUENCY);
+            openVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
+        }
+
         private boolean hasTuner() {
             return mContext.getPackageManager().hasSystemFeature("android.hardware.tv.tuner");
         }
@@ -350,7 +356,7 @@ class TunerHalControl {
                     .build();
         }
 
-        private FilterConfiguration createTsFilterConfiguration(int pid) {
+        private FilterConfiguration createVideoConfiguration(int pid) {
             Log.d(TAG, "-----ts PID: " + pid);
 
             Settings settings = AvSettings
@@ -360,12 +366,12 @@ class TunerHalControl {
 
             return TsFilterConfiguration
                     .builder()
-                    .setTpid(481)
+                    .setTpid(pid)
                     .setSettings(settings)
                     .build();
         }
 
-        private void openTuner() {
+        private void openTuner(int frequency) {
             if (!hasTuner()) {
                 Log.e(TAG, "openTuner() failed, check feature: android.hardware.tv.tuner");
                 return;
@@ -392,6 +398,10 @@ class TunerHalControl {
                     }
                 }
             });
+
+            //start tune
+            FrontendSettings settings = createAtscFrontendSettings(frequency);
+            mTuner.tune(settings);
         }
 
         private void closeTuner() {
@@ -399,11 +409,6 @@ class TunerHalControl {
               mTuner.close();
               mTuner = null;
             }
-        }
-
-        private void startTune() {
-            FrontendSettings settings = createAtscFrontendSettings(195000000);
-            mTuner.tune(settings);
         }
 
         private FilterCallback getFilterCallback() {
@@ -424,11 +429,13 @@ class TunerHalControl {
                     }
                 }
                 @Override
-                public void onFilterStatusChanged(Filter filter, int status) {}
+                public void onFilterStatusChanged(Filter filter, int status) {
+                    Log.d(TAG, "onFilterEvent video, status=" + status);
+                }
             };
         }
 
-        private void setVideoFilter(String mime) {
+        private void openVideoFilter(String mime) {
             //stop first
             onStopPlay();
 
@@ -441,7 +448,7 @@ class TunerHalControl {
             }
 
             MediaFormat mf = MediaFormat.createVideoFormat(mime, 1920, 1080); //MIMETYPE_VIDEO_VP9 : MIMETYPE_VIDEO_MPEG2
-            Log.d(TAG, "[setVideoFilter]: mime:" + mime + "media format:" + mf.toString());
+            Log.d(TAG, "[openVideoFilter]: mime:" + mime + "media format:" + mf.toString());
 
             try {
                 mCodecWrapper = MediaCodecWrapper.fromVideoFormat(mf, new Surface(mVideoView.getSurfaceTexture()));
@@ -453,24 +460,11 @@ class TunerHalControl {
             mVideoFilter = mTuner.openFilter(
                             Filter.TYPE_TS,
                             Filter.SUBTYPE_VIDEO,
-                            2 * 1024 * 1024,
+                            FILTER_BUFFER_SIZE,
                             getExecutor(),
                             getFilterCallback());
-            //------------------------------------------------------
-            //Settings settings = AvSettings
-            //        .builder(Filter.TYPE_TS, false)
-            //        .setPassthrough(false)
-            //        .build();
 
-            //FilterConfiguration config = TsFilterConfiguration
-            //        .builder()
-            //        .setTpid(481)
-            //        .setSettings(settings)
-            //        .build();
-            //------------------------------------------------------
-            FilterConfiguration config = createTsFilterConfiguration(481);
-
-            //int filterId = mVideoFilter.getId();
+            FilterConfiguration config = createVideoConfiguration(VIDEO_TPID);
             mVideoFilter.configure(config);
             mVideoFilter.start();
         }
