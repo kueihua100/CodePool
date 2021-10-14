@@ -20,11 +20,11 @@ LOCAL_RESOURCE_DIR := $(LOCAL_PATH)/res
 LOCAL_DEX_PREOPT := false
 LOCAL_MODULE_TAGS := optional
 
-LOCAL_PRIVATE_PLATFORM_APIS := true
 LOCAL_SYSTEM_EXT_MODULE := true
 LOCAL_CERTIFICATE := platform
 LOCAL_PROPRIETARY_MODULE := false
-#LOCAL_SDK_VERSION := current ##cannot use @hide apis
-
+##to use @hide api: marked LOCAL_SDK_VERSION and set LOCAL_PRIVATE_PLATFORM_APIS to true
+#LOCAL_SDK_VERSION := current
+LOCAL_PRIVATE_PLATFORM_APIS := true
 
 include $(BUILD_PACKAGE)
