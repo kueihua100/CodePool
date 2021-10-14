@@ -37,7 +37,7 @@ class TunerHalControl {
     private final Handler mHandler;
     private TextureView mVideoView;
     private Context mContext = null;
-
+    private boolean mIsPlayThread = true;
 
     private class MyHadler extends Handler {
         private TimeAnimator mTimeAnimator = null;
@@ -46,6 +46,8 @@ class TunerHalControl {
         private Tuner mTuner;
         private Filter mVideoFilter;
         private boolean skipFirstFrame = false;
+        private Thread mPlaybackThread;
+
 
         public MyHadler(Looper looper) {
             super(looper);
@@ -93,7 +95,7 @@ class TunerHalControl {
         }
 
         public void onPlayVideo() {
-            Log.i(TAG, "onPlayVideo()");
+            Log.i(TAG, "onPlayVideo(): mIsPlayThread=" + mIsPlayThread);
 
             mTimeAnimator = new TimeAnimator();
             if (mTimeAnimator == null) {
@@ -105,7 +107,12 @@ class TunerHalControl {
                 throw new NullPointerException("Create MediaExtractor failed!!");
             }
 
-            startPlayback();
+            if (mIsPlayThread) {
+                mPlaybackThread = new Thread(this::playbackThreadLoop, "playback-thread-loop");
+                mPlaybackThread.start();
+            } else {
+                startPlayback();
+            }
         }
 
         public void onStopPlay() {
@@ -124,6 +131,98 @@ class TunerHalControl {
             if (mExtractor != null) {
                 mExtractor.release();
                 mExtractor = null;
+            }
+
+            if (mPlaybackThread != null) {
+                Log.i(TAG, "Join mPlaybackThread ...");
+                try {
+                    mPlaybackThread.join();
+                    mPlaybackThread = null;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        private void playbackThreadLoop() {
+            // Construct a URI that points to the video resource that we want to play
+            //[NOTE]
+            // rename xxx.ts to xxx.mp4, otherwise cannot find the video file
+            String uri = "android.resource://"
+                    + mContext.getPackageName() + "/"
+                    + R.raw.tv_ts;
+            uri = "/data/local/tmp/atsc_cc.ts";
+            Log.i(TAG, "[startPlayback] Play fixed file:" + uri);
+
+            Uri videoUri = Uri.parse(uri);
+
+            try {
+                mExtractor.setDataSource(mContext, videoUri, null);
+                int nTracks = mExtractor.getTrackCount();
+
+                // Begin by unselecting all of the tracks in the extractor, so we won't see
+                // any tracks that we haven't explicitly selected.
+                for (int i = 0; i < nTracks; ++i) {
+                    mExtractor.unselectTrack(i);
+                }
+
+                // Find the first video track in the stream. In a real-world application
+                // it's possible that the stream would contain multiple tracks, but this
+                // sample assumes that we just want to play the first one.
+                for (int i = 0; i < nTracks; ++i) {
+                    // Try to create a video codec for this track. This call will return null if the
+                    // track is not a video track, or not a recognized video format. Once it returns
+                    // a valid MediaCodecWrapper, we can break out of the loop.
+                    mCodecWrapper = MediaCodecWrapper.fromVideoFormat(
+                            mExtractor.getTrackFormat(i),
+                            new Surface(mVideoView.getSurfaceTexture())
+                    );
+
+                    if (mCodecWrapper != null) {
+                        mExtractor.selectTrack(i);
+                        break;
+                    }
+                }
+
+                while (!Thread.interrupted()) {
+                    boolean isEos = ((mExtractor.getSampleFlags() & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+
+                    if (!isEos) {
+                        // Try to submit the sample to the codec and if successful advance the
+                        // extractor to the next available sample to read.
+                        boolean result = false;
+                        if (skipFirstFrame == true) {
+                            Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
+                            skipFirstFrame = false;
+                            result = true;
+                        } else {
+                            result = mCodecWrapper.writeSample(mExtractor, false, mExtractor.getSampleTime(), mExtractor.getSampleFlags());
+                        }
+
+                        if (result) {
+                            // Advancing the extractor is a blocking operation and it MUST be
+                            // executed outside the main thread in real applications.
+                            mExtractor.advance();
+                        }
+
+                        // Examine the sample at the head of the queue to see if its ready to be
+                        // rendered and is not zero sized End-of-Stream record.
+                        MediaCodec.BufferInfo out_bufferInfo = new MediaCodec.BufferInfo();
+                        mCodecWrapper.peekSample(out_bufferInfo);
+
+                        if (out_bufferInfo.size <= 0 && isEos) {
+                            mTimeAnimator.end();
+                            mCodecWrapper.stopAndRelease();
+                            mCodecWrapper = null;
+                            mExtractor.release();
+                            mExtractor = null;
+                        }
+                        // Pop the sample off the queue and send it to {@link Surface}
+                        mCodecWrapper.popSample(true);
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
 
@@ -421,9 +520,10 @@ class TunerHalControl {
         mHandler.sendEmptyMessage(MSG_PLAY_TV_CHANNEL);
     }
 
-    public void playVideo(TextureView view) {
+    public void playVideo(TextureView view, boolean bPlayThread) {
         mVideoView = view;
         mContext = view.getContext();
+        mIsPlayThread = bPlayThread;
         mHandler.sendEmptyMessage(MSG_PLAY_VIDEO_FILE);
     }
 

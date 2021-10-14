@@ -28,13 +28,21 @@
         android:text="Skip 1st Frame" />
 
     <Button
-        android:id="@+id/PlayVideo"
+        android:id="@+id/PlayVideoThread"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="20dp"
         android:layout_marginTop="140dp"
-        android:text="Play Video" />
+        android:text="Play Video Thread" />
 
+    <Button
+        android:id="@+id/PlayVideoTimer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="200dp"
+        android:text="Play Video Timer" />
+        
     <TextView
         android:id="@+id/DemoTunerHal"
         android:layout_width="wrap_content"

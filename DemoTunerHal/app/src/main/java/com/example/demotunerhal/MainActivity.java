@@ -53,18 +53,29 @@ public class MainActivity extends Activity {
                 }
         );
 
-        Button playVideoButton = findViewById(R.id.PlayVideo);
-        playVideoButton.setOnClickListener(
+        Button playVideoThreadButton = findViewById(R.id.PlayVideoThread);
+        playVideoThreadButton.setOnClickListener(
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        Log.d(TAG, "Play Video Button clicked!!");
+                        Log.d(TAG, "Play Video Thread Button clicked!!");
                         mTextView.setText("Play Video File...");
-                        mTunerHalCtrl.playVideo(mVideoView);
+                        mTunerHalCtrl.playVideo(mVideoView, true);
                     }
                 }
         );
 
+        Button playVideoTimerButton = findViewById(R.id.PlayVideoTimer);
+        playVideoTimerButton.setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        Log.d(TAG, "Play Video Timer Button clicked!!");
+                        mTextView.setText("Play Video File...");
+                        mTunerHalCtrl.playVideo(mVideoView, false);
+                    }
+                }
+        );
         Button skipFirstFrameButton = findViewById(R.id.Skip1stFrame);
         skipFirstFrameButton.setOnClickListener(
                 new View.OnClickListener() {
