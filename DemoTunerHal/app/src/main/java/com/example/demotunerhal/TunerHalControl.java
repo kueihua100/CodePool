@@ -146,6 +146,20 @@ class TunerHalControl {
                 mExtractor.release();
                 mExtractor = null;
             }
+
+            //clear video filter
+            if (mVideoFilter != null) {
+                mVideoFilter.flush();
+                mVideoFilter.stop();
+                mVideoFilter.close();
+                mVideoFilter = null;
+            }
+            //close tuner
+            if (mTuner != null) {
+                mTuner.cancelTuning();1
+                mTuner.close();
+            }
+
         }
 
         private void playbackThreadLoop() {
@@ -676,68 +690,6 @@ class TunerHalControl {
         private void runDecodeLoop(MediaEvent me) {
             queueInputBuffer(me, 1000, 10);
             releaseOutputBuffer(1000, 10);
-            //queueCodecInputBuffer(me);
-            //releaseCodecOutputBuffer();
-        }
-
-        private boolean queueCodecInputBuffer(MediaEvent me) {
-            int res = mCodec.dequeueInputBuffer(NO_TIMEOUT);
-            if (res >= 0) {
-                ByteBuffer buffer = mCodec.getInputBuffer(res);
-                if (buffer == null) {
-                    throw new RuntimeException("Null decoder input buffer");
-                }
-
-                Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
-                Log.d(TAG, " me.getDataLength()= " + me.getDataLength());
-                Log.d(TAG, " me.getPts()= " + me.getPts());
-
-                ByteBuffer data = me.getLinearBlock().map();
-                int sampleSize = (int) me.getDataLength();
-                int offset = (int) me.getOffset();
-                long pts = me.getPts();
-
-                if (offset > 0 && offset < data.limit()) {
-                    data.position(offset);
-                } else {
-                    data.position(0);
-                }
-
-                //while (data.position() < data.limit()) {
-                //    buffer.put(data.get());
-                //}
-
-                // fill codec input buffer
-                buffer.clear();
-                buffer.put(data);
-                mCodec.queueInputBuffer(res, 0, sampleSize, pts, 0);
-
-                //release ion buffer
-                me.getLinearBlock().recycle();
-                me.release();
-            } else {
-                Log.d(TAG, "queueCodecInputBuffer res=" + res);
-                return false;
-            }
-            return true;
-        }
-
-        private void releaseCodecOutputBuffer() {
-            // play frames
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            int res = mCodec.dequeueOutputBuffer(bufferInfo, NO_TIMEOUT);
-            if (res >= 0) {
-                mCodec.releaseOutputBuffer(res, true);
-                //notifyVideoAvailable();
-               Log.d(TAG, "notifyVideoAvailable");
-            } else if (res == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                MediaFormat format = mCodec.getOutputFormat();
-                Log.d(TAG, "releaseCodecOutputBuffer: Output format changed:" + format);
-            } else if (res == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                Log.d(TAG, "releaseCodecOutputBuffer: timeout");
-            } else {
-                Log.d(TAG, "Return value of releaseCodecOutputBuffer:" + res);
-            }
         }
     }
 
