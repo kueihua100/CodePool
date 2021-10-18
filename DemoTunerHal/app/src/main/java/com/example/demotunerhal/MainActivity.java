@@ -76,6 +76,7 @@ public class MainActivity extends Activity {
                     }
                 }
         );
+
         Button skipFirstFrameButton = findViewById(R.id.Skip1stFrame);
         skipFirstFrameButton.setOnClickListener(
                 new View.OnClickListener() {
@@ -88,5 +89,12 @@ public class MainActivity extends Activity {
                 }
         );
 
+    }
+
+    @Override
+    protected void onDestroy () {
+        Log.d(TAG, "Called mTunerHalCtrl.stopPlay()!!");
+        mTunerHalCtrl.stopPlay(null);
+        super.onDestroy();
     }
 }

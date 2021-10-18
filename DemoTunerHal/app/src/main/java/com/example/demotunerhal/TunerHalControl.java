@@ -19,6 +19,9 @@ import android.widget.TextView;
 import java.io.IOException;
 import java.util.concurrent.Executor;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Objects;
 
 import android.media.tv.tuner.*;
 import android.media.tv.tuner.filter.*;
@@ -58,10 +61,15 @@ class TunerHalControl {
         private Thread mPlaybackThread = null;
         private MediaCodec mCodec = null;
         private boolean mUseCodecWrapper = false;
-
+        private Deque<MediaEvent> mVideoEventQueue;
+        private static final int STATE_STOP = 0;
+        private static final int STATE_PLAY = 1;
+        final private Object mStateLock;
+        private int mState = STATE_STOP;
 
         public MyHadler(Looper looper) {
             super(looper);
+            mStateLock = new Object();
         }
 
         @Override
@@ -100,6 +108,9 @@ class TunerHalControl {
         //------------------------------------------------------------
         public void onPlayVideo() {
             Log.i(TAG, "onPlayVideo(): mIsPlayThread=" + mIsPlayThread);
+            synchronized (mStateLock) {
+                mState = STATE_PLAY;
+            }
 
             mTimeAnimator = new TimeAnimator();
             if (mTimeAnimator == null) {
@@ -121,6 +132,10 @@ class TunerHalControl {
 
         public void onStopPlay() {
             Log.i(TAG, "onStopPlay()");
+
+            synchronized (mStateLock) {
+                mState = STATE_STOP;
+            }
 
             if(mTimeAnimator != null && mTimeAnimator.isRunning()) {
                 mTimeAnimator.end();
@@ -156,9 +171,12 @@ class TunerHalControl {
             }
             //close tuner
             if (mTuner != null) {
-                mTuner.cancelTuning();1
+                mTuner.cancelTuning();
                 mTuner.close();
+                mTuner = null;
             }
+            //clear event queue
+            mVideoEventQueue = null;
 
         }
 
@@ -355,6 +373,10 @@ class TunerHalControl {
     //------------------------------------------------------------
         public void onPlayTv() {
             Log.i(TAG, "onPlayTv()");
+            synchronized (mStateLock) {
+                mState = STATE_PLAY;
+            }
+
             if (!mUseCodecWrapper) {
                 initCodec(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
             } else {
@@ -507,11 +529,19 @@ class TunerHalControl {
                 public void onFilterEvent(Filter filter, FilterEvent[] events) {
                     for (FilterEvent e : events) {
                         if (e instanceof MediaEvent) {
-                            //queue to MediaCodec
-                            if (!mUseCodecWrapper) {
-                                runDecodeLoop((MediaEvent)e);
-                            } else {
-                                queueInput((MediaEvent)e);
+                            //different thread, check is running first
+                             synchronized (mStateLock) {
+                                if (mState != STATE_PLAY) {
+                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED!!");
+                                    return;
+                                }
+                                //queue to MediaCodec
+                                if (!mUseCodecWrapper) {
+                                    mVideoEventQueue.add((MediaEvent)e);
+                                    runDecodeLoop((MediaEvent)e);
+                                } else {
+                                    queueInput((MediaEvent)e);
+                                }
                             }
                         } else if (e instanceof SectionEvent) {
                             //testSectionEvent(filter, (SectionEvent) e);
@@ -548,7 +578,11 @@ class TunerHalControl {
 
             FilterConfiguration config = createVideoConfiguration(VIDEO_TPID);
             mVideoFilter.configure(config);
+            //start video filter
             mVideoFilter.start();
+
+            //create video event queue
+            mVideoEventQueue = new ArrayDeque<>();
         }
 
         private void queueInput(MediaEvent me) {
@@ -565,6 +599,7 @@ class TunerHalControl {
                 boolean res = mCodecWrapper.writeSample(esBuffer, null, me.getPts(), 0);
                 Log.d(TAG, " mCodecWrapper.writeSample()= " + res);
             } catch (MediaCodecWrapper.WriteException e) {
+                 e.printStackTrace();
             }
 
             linearBlock.recycle();
@@ -625,17 +660,25 @@ class TunerHalControl {
             }
         }
 
-        private void queueInputBuffer(MediaEvent me, long timeoutUs, int timeOutCount) {
+        private boolean queueInputBuffer(MediaEvent me, long timeoutUs, int timeOutCount) {
             //check input buffer
             int index = MediaCodec.INFO_TRY_AGAIN_LATER;
             int count = 0;
             while (count++ < timeOutCount) {
-                if ((index = mCodec.dequeueInputBuffer(timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    break;
+                try {
+                    if ((index = mCodec.dequeueInputBuffer(timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        break;
+                    }
+                } catch (MediaCodec.CodecException e) {
+                     e.printStackTrace();
                 }
             }
-
             Log.d(TAG, "dequeueInputBuffer() =" + index + ", count=" + count);
+
+            if (index < 0) {
+                return false;
+            }
+
             ByteBuffer inputBuffer;
             if ((inputBuffer = mCodec.getInputBuffer(index)) == null) {
                 throw new RuntimeException("Null decoder input buffer");
@@ -657,6 +700,7 @@ class TunerHalControl {
             //release ion buffer
             me.getLinearBlock().recycle();
             me.release();
+            return true;
         }
 
         private void releaseOutputBuffer(long timeoutUs, int timeOutCount) {
@@ -665,8 +709,12 @@ class TunerHalControl {
             int index = MediaCodec.INFO_TRY_AGAIN_LATER;
             int count = 0;
             while (count++ < timeOutCount) {
-                if ((index = mCodec.dequeueOutputBuffer(info, timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    break;
+                try {
+                    if ((index = mCodec.dequeueOutputBuffer(info, timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        break;
+                    }
+                } catch (MediaCodec.CodecException e) {
+                     e.printStackTrace();
                 }
             }
 
@@ -688,8 +736,21 @@ class TunerHalControl {
         }
 
         private void runDecodeLoop(MediaEvent me) {
-            queueInputBuffer(me, 1000, 10);
-            releaseOutputBuffer(1000, 10);
+            //check is running
+            synchronized (mStateLock) {
+                if (mState != STATE_PLAY) {
+                    Log.d(TAG, "runDecodeLoop(): Playback is STOPPED!!");
+                    return;
+                }
+            }
+            //check event queue and start decode process
+             if (!mVideoEventQueue.isEmpty()) {
+                if (queueInputBuffer(mVideoEventQueue.getFirst(), 1000, 10) == true) {
+                    //remove consumed event
+                    mVideoEventQueue.pollFirst();
+                }
+                releaseOutputBuffer(1000, 10);
+            }
         }
     }
 
