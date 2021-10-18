@@ -560,8 +560,7 @@ class TunerHalControl {
             mCodecWrapper.peekSample(out_bufferInfo);
         }
 
-        private void runDecodeLoop(MediaEvent me) {
-            //------------------------------------------
+        private void queueInputBuffer_wait(MediaEvent me) {
             //check input buffer
             int index;
             while ((index = mCodec.dequeueInputBuffer(NO_TIMEOUT)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
@@ -569,7 +568,10 @@ class TunerHalControl {
             }
 
             Log.d(TAG, "dequeueInputBuffer(): got free input index= " + index);
-            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+            ByteBuffer inputBuffer;
+            if ((inputBuffer = mCodec.getInputBuffer(index)) == null) {
+                throw new RuntimeException("Null decoder input buffer");
+            }
 
             ByteBuffer sampleData = me.getLinearBlock().map();
             int sampleSize = (int) me.getDataLength();
@@ -587,10 +589,13 @@ class TunerHalControl {
             //release ion buffer
             me.getLinearBlock().recycle();
             me.release();
+        }
 
-            //------------------------------------------
+        private void releaseOutputBuffer_wait() {
             //check output buffer
+            int index;
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+
             while ((index = mCodec.dequeueOutputBuffer(info, NO_TIMEOUT)) !=  MediaCodec.INFO_TRY_AGAIN_LATER) {
                 if (index >= 0) {
                     mCodec.releaseOutputBuffer(index, true);
@@ -606,8 +611,77 @@ class TunerHalControl {
             }
         }
 
+        private void queueInputBuffer(MediaEvent me, long timeoutUs, int timeOutCount) {
+            //check input buffer
+            int index = MediaCodec.INFO_TRY_AGAIN_LATER;
+            int count = 0;
+            while (count++ < timeOutCount) {
+                if ((index = mCodec.dequeueInputBuffer(timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    break;
+                }
+            }
+
+            Log.d(TAG, "dequeueInputBuffer() =" + index + ", count=" + count);
+            ByteBuffer inputBuffer;
+            if ((inputBuffer = mCodec.getInputBuffer(index)) == null) {
+                throw new RuntimeException("Null decoder input buffer");
+            }
+
+            ByteBuffer sampleData = me.getLinearBlock().map();
+            int sampleSize = (int) me.getDataLength();
+            long pts = me.getPts();
+
+            Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+            Log.d(TAG, " me.getDataLength()= " + sampleSize);
+            Log.d(TAG, " me.getPts()= " + pts);
+
+            // fill codec input buffer
+            inputBuffer.clear();
+            inputBuffer.put(sampleData);
+            mCodec.queueInputBuffer(index, 0, sampleSize, pts, 0);
+
+            //release ion buffer
+            me.getLinearBlock().recycle();
+            me.release();
+        }
+
+        private void releaseOutputBuffer(long timeoutUs, int timeOutCount) {
+            //check output buffer
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            int index = MediaCodec.INFO_TRY_AGAIN_LATER;
+            int count = 0;
+            while (count++ < timeOutCount) {
+                if ((index = mCodec.dequeueOutputBuffer(info, timeoutUs)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    break;
+                }
+            }
+
+            Log.d(TAG, "dequeueOutputBuffer() =" + index + ", count=" + count);
+
+            if (index >= 0) {
+                mCodec.releaseOutputBuffer(index, true);
+                Log.d(TAG, "dequeueOutputBuffer(): got free output index= " + index);
+            } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                MediaFormat format = mCodec.getOutputFormat();
+                Log.d(TAG, "dequeueOutputBuffer(): Output format changed: " + format);
+            } else if (index == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                Log.d(TAG, "dequeueOutputBuffer(): Output buffer changed!");
+            } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                Log.d(TAG, "dequeueOutputBuffer(): time out!");
+            } else {
+                throw new IllegalStateException("Unknown status from dequeueOutputBuffer(): " + index);
+            }
+        }
+
+        private void runDecodeLoop(MediaEvent me) {
+            queueInputBuffer(me, 1000, 10);
+            releaseOutputBuffer(1000, 10);
+            //queueCodecInputBuffer(me);
+            //releaseCodecOutputBuffer();
+        }
+
         private boolean queueCodecInputBuffer(MediaEvent me) {
-            int res = mCodec.dequeueInputBuffer(TIMEOUT_US);
+            int res = mCodec.dequeueInputBuffer(NO_TIMEOUT);
             if (res >= 0) {
                 ByteBuffer buffer = mCodec.getInputBuffer(res);
                 if (buffer == null) {
@@ -651,7 +725,7 @@ class TunerHalControl {
         private void releaseCodecOutputBuffer() {
             // play frames
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            int res = mCodec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US);
+            int res = mCodec.dequeueOutputBuffer(bufferInfo, NO_TIMEOUT);
             if (res >= 0) {
                 mCodec.releaseOutputBuffer(res, true);
                 //notifyVideoAvailable();
