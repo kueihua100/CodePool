@@ -24,6 +24,7 @@ import android.media.tv.tuner.*;
 import android.media.tv.tuner.filter.*;
 import android.media.tv.tuner.frontend.*;
 
+
 class TunerHalControl {
     private static final String TAG = "DemoTunerHal-ctrl";
 
@@ -36,6 +37,7 @@ class TunerHalControl {
     private final HandlerThread mHandlerThread;
     private final Handler mHandler;
     private TextureView mVideoView;
+    private Surface mSurface;
     private Context mContext = null;
     private boolean mIsPlayThread = true;
 
@@ -43,15 +45,19 @@ class TunerHalControl {
     private static final int AUDIO_TPID = 484;
     private static final int VIDEO_TPID = 481;
     private static final int FREQUENCY = 195000000;
+    private static final int TIMEOUT_US = 100000;
+    private static final int NO_TIMEOUT = 0;
 
     private class MyHadler extends Handler {
         private TimeAnimator mTimeAnimator = null;
         private MediaExtractor mExtractor = null;
-        private MediaCodecWrapper mCodecWrapper;
+        private MediaCodecWrapper mCodecWrapper = null;
         private Tuner mTuner;
         private Filter mVideoFilter;
-        private boolean skipFirstFrame = false;
+        private boolean mSkipFirstFrame = false;
         private Thread mPlaybackThread = null;
+        private MediaCodec mCodec = null;
+        private boolean mUseCodecWrapper = false;
 
 
         public MyHadler(Looper looper) {
@@ -79,10 +85,10 @@ class TunerHalControl {
                     break;
                 case MSG_SKIP_FIRST_FRAME:
                     Log.d(TAG, "case MSG_SKIP_FIRST_FRAME");
-                    if (skipFirstFrame == false) {
-                        skipFirstFrame = true;
+                    if (mSkipFirstFrame == false) {
+                        mSkipFirstFrame = true;
                     }
-                    Log.i(TAG, "--- skipFirstFrame=" + skipFirstFrame);
+                    Log.i(TAG, "--- mSkipFirstFrame=" + mSkipFirstFrame);
                     break;
                 default:
                     Log.d(TAG, "Why in [default] case??");
@@ -119,6 +125,16 @@ class TunerHalControl {
             if(mTimeAnimator != null && mTimeAnimator.isRunning()) {
                 mTimeAnimator.end();
             }
+            //stop playback thread before closing codec and extractor
+            if (mPlaybackThread != null) {
+                Log.i(TAG, "Join mPlaybackThread ...");
+                try {
+                    mPlaybackThread.join();
+                    mPlaybackThread = null;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
 
             if (mCodecWrapper != null ) {
                 mCodecWrapper.stopAndRelease();
@@ -129,16 +145,6 @@ class TunerHalControl {
             if (mExtractor != null) {
                 mExtractor.release();
                 mExtractor = null;
-            }
-
-            if (mPlaybackThread != null) {
-                Log.i(TAG, "Join mPlaybackThread ...");
-                try {
-                    mPlaybackThread.join();
-                    mPlaybackThread = null;
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
             }
         }
 
@@ -173,7 +179,7 @@ class TunerHalControl {
                     // a valid MediaCodecWrapper, we can break out of the loop.
                     mCodecWrapper = MediaCodecWrapper.fromVideoFormat(
                             mExtractor.getTrackFormat(i),
-                            new Surface(mVideoView.getSurfaceTexture())
+                            mSurface
                     );
 
                     if (mCodecWrapper != null) {
@@ -189,9 +195,9 @@ class TunerHalControl {
                         // Try to submit the sample to the codec and if successful advance the
                         // extractor to the next available sample to read.
                         boolean result = false;
-                        if (skipFirstFrame == true) {
+                        if (mSkipFirstFrame == true) {
                             Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
-                            skipFirstFrame = false;
+                            mSkipFirstFrame = false;
                             result = true;
                         } else {
                             result = mCodecWrapper.writeSample(mExtractor, false, mExtractor.getSampleTime(), mExtractor.getSampleFlags());
@@ -257,7 +263,7 @@ class TunerHalControl {
                     // a valid MediaCodecWrapper, we can break out of the loop.
                     mCodecWrapper = MediaCodecWrapper.fromVideoFormat(
                             mExtractor.getTrackFormat(i),
-                            new Surface(mVideoView.getSurfaceTexture())
+                            mSurface
                     );
 
                     if (mCodecWrapper != null) {
@@ -284,9 +290,9 @@ class TunerHalControl {
                             // Try to submit the sample to the codec and if successful advance the
                             // extractor to the next available sample to read.
                             boolean result = false;
-                            if (skipFirstFrame == true) {
+                            if (mSkipFirstFrame == true) {
                                 Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
-                                skipFirstFrame = false;
+                                mSkipFirstFrame = false;
                                 result = true;
                             } else {
                                 result = mCodecWrapper.writeSample(mExtractor, false,
@@ -330,12 +336,82 @@ class TunerHalControl {
             }
         }
 
-
+    //------------------------------------------------------------
+    //------------------------------------------------------------
     //------------------------------------------------------------
         public void onPlayTv() {
             Log.i(TAG, "onPlayTv()");
+            if (!mUseCodecWrapper) {
+                initCodec(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
+            } else {
+                initCodecWrapper(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
+            }
+
             openTuner(FREQUENCY);
             openVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
+
+            //create decode thread
+            /*
+            mDecoderThread =
+                    new Thread(
+                            this::decodeThread,
+                            "DemoTunerHal-decode-thread");
+            mDecoderThread.start();*/
+        }
+
+        private boolean initCodec(String mime, int width, int high) {
+            Log.i(TAG, "initCodec()");
+
+            if (mCodec != null) {
+                mCodec.release();
+                mCodec = null;
+            }
+
+            try {
+                mCodec = MediaCodec.createDecoderByType(mime);
+                MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
+                mCodec.configure(mf, mSurface, null, 0);
+                //start codec
+                mCodec.start();
+            } catch (IOException e) {
+                Log.e(TAG, "[initCodec] Error: " + e.getMessage());
+            }
+
+            if (mCodec == null) {
+                Log.e(TAG, "[initCodec] null codec!");
+                return false;
+            }
+            return true;
+        }
+
+        private boolean initCodecWrapper(String mime, int width, int high) {
+            Log.i(TAG, "initCodecWrapper()");
+
+            if (mCodecWrapper != null ) {
+                mCodecWrapper.stopAndRelease();
+                mCodecWrapper = null;
+                //mExtractor.release();
+            }
+
+            if (mExtractor != null) {
+                mExtractor.release();
+                mExtractor = null;
+            }
+
+            MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
+            Log.d(TAG, "[openVideoFilter]: mime:" + mime + ", media format:" + mf.toString());
+
+            try {
+                mCodecWrapper = MediaCodecWrapper.fromVideoFormat(mf, mSurface);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            if (mCodecWrapper == null) {
+                Log.e(TAG, "[initCodecWrapper] null codecWrapper!");
+                return false;
+            }
+            return true;
         }
 
         private boolean hasTuner() {
@@ -418,7 +494,11 @@ class TunerHalControl {
                     for (FilterEvent e : events) {
                         if (e instanceof MediaEvent) {
                             //queue to MediaCodec
-                            queueInput((MediaEvent)e);
+                            if (!mUseCodecWrapper) {
+                                runDecodeLoop((MediaEvent)e);
+                            } else {
+                                queueInput((MediaEvent)e);
+                            }
                         } else if (e instanceof SectionEvent) {
                             //testSectionEvent(filter, (SectionEvent) e);
                         } else if (e instanceof TemiEvent) {
@@ -436,24 +516,12 @@ class TunerHalControl {
         }
 
         private void openVideoFilter(String mime) {
-            //stop first
-            onStopPlay();
-
             //clear before new setup
             if (mVideoFilter != null) {
                 mVideoFilter.flush();
                 mVideoFilter.stop();
                 mVideoFilter.close();
                 mVideoFilter = null;
-            }
-
-            MediaFormat mf = MediaFormat.createVideoFormat(mime, 1920, 1080); //MIMETYPE_VIDEO_VP9 : MIMETYPE_VIDEO_MPEG2
-            Log.d(TAG, "[openVideoFilter]: mime:" + mime + "media format:" + mf.toString());
-
-            try {
-                mCodecWrapper = MediaCodecWrapper.fromVideoFormat(mf, new Surface(mVideoView.getSurfaceTexture()));
-            } catch (IOException e) {
-                e.printStackTrace();
             }
 
             //open filter
@@ -469,7 +537,7 @@ class TunerHalControl {
             mVideoFilter.start();
         }
 
-        public void queueInput(MediaEvent me) {
+        private void queueInput(MediaEvent me) {
             mCodecWrapper.popSample(true);
 
             MediaCodec.LinearBlock linearBlock = me.getLinearBlock();
@@ -491,6 +559,112 @@ class TunerHalControl {
             MediaCodec.BufferInfo out_bufferInfo = new MediaCodec.BufferInfo();
             mCodecWrapper.peekSample(out_bufferInfo);
         }
+
+        private void runDecodeLoop(MediaEvent me) {
+            //------------------------------------------
+            //check input buffer
+            int index;
+            while ((index = mCodec.dequeueInputBuffer(NO_TIMEOUT)) != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                break;
+            }
+
+            Log.d(TAG, "dequeueInputBuffer(): got free input index= " + index);
+            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+
+            ByteBuffer sampleData = me.getLinearBlock().map();
+            int sampleSize = (int) me.getDataLength();
+            long pts = me.getPts();
+
+            Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+            Log.d(TAG, " me.getDataLength()= " + sampleSize);
+            Log.d(TAG, " me.getPts()= " + pts);
+
+            // fill codec input buffer
+            inputBuffer.clear();
+            inputBuffer.put(sampleData);
+            mCodec.queueInputBuffer(index, 0, sampleSize, pts, 0);
+
+            //release ion buffer
+            me.getLinearBlock().recycle();
+            me.release();
+
+            //------------------------------------------
+            //check output buffer
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            while ((index = mCodec.dequeueOutputBuffer(info, NO_TIMEOUT)) !=  MediaCodec.INFO_TRY_AGAIN_LATER) {
+                if (index >= 0) {
+                    mCodec.releaseOutputBuffer(index, true);
+                    Log.d(TAG, "dequeueOutputBuffer(): got free output index= " + index);
+                } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    MediaFormat format = mCodec.getOutputFormat();
+                    Log.d(TAG, "dequeueOutputBuffer(): Output format changed: " + format);
+                } else if (index == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                    Log.d(TAG, "dequeueOutputBuffer(): Output buffer changed!");
+                } else {
+                    throw new IllegalStateException("Unknown status from dequeueOutputBuffer(): " + index);
+                }
+            }
+        }
+
+        private boolean queueCodecInputBuffer(MediaEvent me) {
+            int res = mCodec.dequeueInputBuffer(TIMEOUT_US);
+            if (res >= 0) {
+                ByteBuffer buffer = mCodec.getInputBuffer(res);
+                if (buffer == null) {
+                    throw new RuntimeException("Null decoder input buffer");
+                }
+
+                Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+                Log.d(TAG, " me.getDataLength()= " + me.getDataLength());
+                Log.d(TAG, " me.getPts()= " + me.getPts());
+
+                ByteBuffer data = me.getLinearBlock().map();
+                int sampleSize = (int) me.getDataLength();
+                int offset = (int) me.getOffset();
+                long pts = me.getPts();
+
+                if (offset > 0 && offset < data.limit()) {
+                    data.position(offset);
+                } else {
+                    data.position(0);
+                }
+
+                //while (data.position() < data.limit()) {
+                //    buffer.put(data.get());
+                //}
+
+                // fill codec input buffer
+                buffer.clear();
+                buffer.put(data);
+                mCodec.queueInputBuffer(res, 0, sampleSize, pts, 0);
+
+                //release ion buffer
+                me.getLinearBlock().recycle();
+                me.release();
+            } else {
+                Log.d(TAG, "queueCodecInputBuffer res=" + res);
+                return false;
+            }
+            return true;
+        }
+
+        private void releaseCodecOutputBuffer() {
+            // play frames
+            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+            int res = mCodec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US);
+            if (res >= 0) {
+                mCodec.releaseOutputBuffer(res, true);
+                //notifyVideoAvailable();
+               Log.d(TAG, "notifyVideoAvailable");
+            } else if (res == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                MediaFormat format = mCodec.getOutputFormat();
+                Log.d(TAG, "releaseCodecOutputBuffer: Output format changed:" + format);
+            } else if (res == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                Log.d(TAG, "releaseCodecOutputBuffer: timeout");
+            } else {
+                Log.d(TAG, "Return value of releaseCodecOutputBuffer:" + res);
+            }
+        }
     }
 
     public TunerHalControl() {
@@ -511,12 +685,14 @@ class TunerHalControl {
     public void playTv(TextureView view) {
         mVideoView = view;
         mContext = view.getContext();
+        mSurface = new Surface(mVideoView.getSurfaceTexture());
         mHandler.sendEmptyMessage(MSG_PLAY_TV_CHANNEL);
     }
 
     public void playVideo(TextureView view, boolean bPlayThread) {
         mVideoView = view;
         mContext = view.getContext();
+        mSurface = new Surface(mVideoView.getSurfaceTexture());
         mIsPlayThread = bPlayThread;
         mHandler.sendEmptyMessage(MSG_PLAY_VIDEO_FILE);
     }
@@ -530,6 +706,7 @@ class TunerHalControl {
     public void skipFirstFrame(TextureView view) {
         mVideoView = view;
         mContext = view.getContext();
+        mSurface = new Surface(mVideoView.getSurfaceTexture());
         mHandler.sendEmptyMessage(MSG_SKIP_FIRST_FRAME);
     }
 }
