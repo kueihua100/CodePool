@@ -137,47 +137,17 @@ class TunerHalControl {
                 mState = STATE_STOP;
             }
 
-            if(mTimeAnimator != null && mTimeAnimator.isRunning()) {
-                mTimeAnimator.end();
-            }
             //stop playback thread before closing codec and extractor
-            if (mPlaybackThread != null) {
-                Log.i(TAG, "Join mPlaybackThread ...");
-                try {
-                    mPlaybackThread.join();
-                    mPlaybackThread = null;
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
+            closeDecodeThread();
 
-            if (mCodecWrapper != null ) {
-                mCodecWrapper.stopAndRelease();
-                mCodecWrapper = null;
-                //mExtractor.release();
-            }
-
-            if (mExtractor != null) {
-                mExtractor.release();
-                mExtractor = null;
-            }
+            //close codec wrapper
+            closeCodecWrapper();
 
             //clear video filter
-            if (mVideoFilter != null) {
-                mVideoFilter.flush();
-                mVideoFilter.stop();
-                mVideoFilter.close();
-                mVideoFilter = null;
-            }
-            //close tuner
-            if (mTuner != null) {
-                mTuner.cancelTuning();
-                mTuner.close();
-                mTuner = null;
-            }
-            //clear event queue
-            mVideoEventQueue = null;
+            closeVideoFilter();
 
+            //close tuner
+            closeTuner();
         }
 
         private void playbackThreadLoop() {
@@ -377,26 +347,17 @@ class TunerHalControl {
                 mState = STATE_PLAY;
             }
 
-            if (!mUseCodecWrapper) {
-                initCodec(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
-            } else {
-                initCodecWrapper(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
-            }
+            openCodec(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080);
 
             openTuner(FREQUENCY);
             openVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
 
             //create decode thread
-            /*
-            mDecoderThread =
-                    new Thread(
-                            this::decodeThread,
-                            "DemoTunerHal-decode-thread");
-            mDecoderThread.start();*/
+            openDecodeThread();
         }
 
-        private boolean initCodec(String mime, int width, int high) {
-            Log.i(TAG, "initCodec()");
+        private boolean openCodec(String mime, int width, int high) {
+            Log.i(TAG, "openCodec()");
 
             if (mCodec != null) {
                 mCodec.release();
@@ -410,18 +371,18 @@ class TunerHalControl {
                 //start codec
                 mCodec.start();
             } catch (IOException e) {
-                Log.e(TAG, "[initCodec] Error: " + e.getMessage());
+                Log.e(TAG, "[openCodec] Error: " + e.getMessage());
             }
 
             if (mCodec == null) {
-                Log.e(TAG, "[initCodec] null codec!");
+                Log.e(TAG, "[openCodec] null codec!");
                 return false;
             }
             return true;
         }
 
-        private boolean initCodecWrapper(String mime, int width, int high) {
-            Log.i(TAG, "initCodecWrapper()");
+        private boolean openCodecWrapper(String mime, int width, int high) {
+            Log.i(TAG, "openCodecWrapper()");
 
             if (mCodecWrapper != null ) {
                 mCodecWrapper.stopAndRelease();
@@ -435,7 +396,7 @@ class TunerHalControl {
             }
 
             MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
-            Log.d(TAG, "[openVideoFilter]: mime:" + mime + ", media format:" + mf.toString());
+            Log.d(TAG, "[openCodecWrapper]: mime:" + mime + ", media format:" + mf.toString());
 
             try {
                 mCodecWrapper = MediaCodecWrapper.fromVideoFormat(mf, mSurface);
@@ -444,10 +405,27 @@ class TunerHalControl {
             }
 
             if (mCodecWrapper == null) {
-                Log.e(TAG, "[initCodecWrapper] null codecWrapper!");
+                Log.e(TAG, "[openCodecWrapper] null codecWrapper!");
                 return false;
             }
             return true;
+        }
+
+        private void closeCodecWrapper() {
+            if(mTimeAnimator != null && mTimeAnimator.isRunning()) {
+                mTimeAnimator.end();
+            }
+
+            if (mCodecWrapper != null ) {
+                mCodecWrapper.stopAndRelease();
+                mCodecWrapper = null;
+                //mExtractor.release();
+            }
+
+            if (mExtractor != null) {
+                mExtractor.release();
+                mExtractor = null;
+            }
         }
 
         private boolean hasTuner() {
@@ -518,8 +496,9 @@ class TunerHalControl {
 
         private void closeTuner() {
             if (mTuner != null) {
-              mTuner.close();
-              mTuner = null;
+                mTuner.cancelTuning();
+                mTuner.close();
+                mTuner = null;
             }
         }
 
@@ -531,16 +510,11 @@ class TunerHalControl {
                         if (e instanceof MediaEvent) {
                             //different thread, check is running first
                              synchronized (mStateLock) {
-                                if (mState != STATE_PLAY) {
-                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED!!");
-                                    return;
-                                }
-                                //queue to MediaCodec
-                                if (!mUseCodecWrapper) {
+                                if (mState == STATE_PLAY) {
+                                    //queue event
                                     mVideoEventQueue.add((MediaEvent)e);
-                                    runDecodeLoop((MediaEvent)e);
                                 } else {
-                                    queueInput((MediaEvent)e);
+                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED!!");
                                 }
                             }
                         } else if (e instanceof SectionEvent) {
@@ -561,12 +535,7 @@ class TunerHalControl {
 
         private void openVideoFilter(String mime) {
             //clear before new setup
-            if (mVideoFilter != null) {
-                mVideoFilter.flush();
-                mVideoFilter.stop();
-                mVideoFilter.close();
-                mVideoFilter = null;
-            }
+           closeVideoFilter();
 
             //open filter
             mVideoFilter = mTuner.openFilter(
@@ -584,6 +553,18 @@ class TunerHalControl {
             //create video event queue
             mVideoEventQueue = new ArrayDeque<>();
         }
+
+         private void closeVideoFilter() {
+            //clear before new setup
+            if (mVideoFilter != null) {
+                mVideoFilter.flush();
+                mVideoFilter.stop();
+                mVideoFilter.close();
+                mVideoFilter = null;
+            }
+            //clear event queue
+            mVideoEventQueue = null;
+         }
 
         private void queueInput(MediaEvent me) {
             mCodecWrapper.popSample(true);
@@ -735,21 +716,36 @@ class TunerHalControl {
             }
         }
 
-        private void runDecodeLoop(MediaEvent me) {
-            //check is running
-            synchronized (mStateLock) {
-                if (mState != STATE_PLAY) {
-                    Log.d(TAG, "runDecodeLoop(): Playback is STOPPED!!");
-                    return;
+        private void openDecodeThread() {
+            //create decode thread
+            mPlaybackThread =new Thread(this::runDecodeLoop, "DemoTunerHal-decode-thread");
+            //start thread
+            mPlaybackThread.start();
+        }
+
+        private void closeDecodeThread() {
+            if (mPlaybackThread != null) {
+                Log.i(TAG, "Join mPlaybackThread ...");
+                try {
+                    mPlaybackThread.interrupt();
+                    mPlaybackThread.join();
+                    mPlaybackThread = null;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
-            //check event queue and start decode process
-             if (!mVideoEventQueue.isEmpty()) {
-                if (queueInputBuffer(mVideoEventQueue.getFirst(), 1000, 10) == true) {
-                    //remove consumed event
-                    mVideoEventQueue.pollFirst();
+        }
+
+        private void runDecodeLoop() {
+            while (!Thread.interrupted()) {
+                //check event queue and start decode process
+                 if (!mVideoEventQueue.isEmpty()) {
+                    if (queueInputBuffer(mVideoEventQueue.getFirst(), 1000, 10) == true) {
+                        //remove consumed event
+                        mVideoEventQueue.pollFirst();
+                    }
+                    releaseOutputBuffer(1000, 10);
                 }
-                releaseOutputBuffer(1000, 10);
             }
         }
     }
