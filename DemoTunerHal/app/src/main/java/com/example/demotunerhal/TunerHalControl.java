@@ -143,6 +143,9 @@ class TunerHalControl {
             //close codec wrapper
             closeCodecWrapper();
 
+            //close codec
+            closeCodec();
+
             //clear video filter
             closeVideoFilter();
 
@@ -360,6 +363,7 @@ class TunerHalControl {
             Log.i(TAG, "openCodec()");
 
             if (mCodec != null) {
+                mCodec.stop();
                 mCodec.release();
                 mCodec = null;
             }
@@ -379,6 +383,14 @@ class TunerHalControl {
                 return false;
             }
             return true;
+        }
+
+        private void closeCodec() {
+            if (mCodec != null) {
+                mCodec.stop();
+                mCodec.release();
+                mCodec = null;
+            }
         }
 
         private boolean openCodecWrapper(String mime, int width, int high) {
