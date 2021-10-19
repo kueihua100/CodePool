@@ -44,6 +44,8 @@ class TunerHalControl {
     private Context mContext = null;
     private boolean mIsPlayThread = true;
 
+    private static final int VIDEO_WIDTH = 1920;
+    private static final int VIDEO_HEIGHT = 1080;
     private static final int FILTER_BUFFER_SIZE = 2 * 1024 * 1024;
     private static final int AUDIO_TPID = 484;
     private static final int VIDEO_TPID = 481;
@@ -89,11 +91,8 @@ class TunerHalControl {
             //stop playback thread before closing codec and extractor
             closeDecodeThread();
 
-            //close codec
-            closeCodec();
-
-            //clear video filter
-            closeVideoFilter();
+            //close video codec and video filter
+            closeVideo();
 
             //close tuner
             closeTuner();
@@ -132,13 +131,18 @@ class TunerHalControl {
                     .build();
         }
 
-        public void openTuner(int frequency) {
+        public void openTuner() {
+            Log.i(TAG, "------ openTuner()");
+
             if (!hasTuner()) {
                 Log.e(TAG, "openTuner() failed, check feature: android.hardware.tv.tuner");
                 return;
             }
             //new Tuner
-            mTuner = new Tuner(mContext, null, 100);
+            if (( mTuner = new Tuner(mContext, null, 100)) == null) {
+                throw new NullPointerException("Create Tuner()  failed!!");
+            }
+
             //set tuner event listener
             mTuner.setOnTuneEventListener(getExecutor(), new OnTuneEventListener() {
                 @Override
@@ -159,6 +163,10 @@ class TunerHalControl {
                     }
                 }
             });
+        }
+
+        public void startTune(int frequency) {
+            Log.i(TAG, "------ startTuner(): frequency=" + frequency);
 
             //start tune
             FrontendSettings settings = createAtscFrontendSettings(frequency);
@@ -167,13 +175,47 @@ class TunerHalControl {
 
         public void closeTuner() {
             if (mTuner != null) {
+                Log.i(TAG, "------ closeTuner()");
+
                 mTuner.cancelTuning();
                 mTuner.close();
                 mTuner = null;
             }
         }
 
-        public void openVideoFilter(String mime) {
+        public boolean openVideo(String mime, int width, int height, long filterBufferSize) {
+            //create video codec according to mine, width, height
+            openVideoCodec(mime, width, height);
+
+            //create video filter and video event queue
+            openVideoFilter(filterBufferSize);
+
+            return true;
+        }
+
+         public int startVideo(int pid) {
+            Log.i(TAG, "------ startVideo(): pid=" + pid);
+
+            //start codec
+            mCodec.start();
+
+            //config video filter
+            FilterConfiguration config = createVideoConfiguration(pid);
+            mVideoFilter.configure(config);
+
+            //start video filter
+            return mVideoFilter.start();
+         }
+
+        public void closeVideo() {
+            //close codec
+            closeCodec();
+
+            //clear video filter
+            closeVideoFilter();
+        }
+
+        private void openVideoFilter(long filterBufferSize) {
             //clear before new setup
            closeVideoFilter();
 
@@ -181,29 +223,32 @@ class TunerHalControl {
             mVideoFilter = mTuner.openFilter(
                             Filter.TYPE_TS,
                             Filter.SUBTYPE_VIDEO,
-                            FILTER_BUFFER_SIZE,
+                            filterBufferSize,
                             getExecutor(),
                             getFilterCallback());
 
-            FilterConfiguration config = createVideoConfiguration(VIDEO_TPID);
-            mVideoFilter.configure(config);
-            //start video filter
-            mVideoFilter.start();
+            if (mVideoFilter == null) {
+                throw new NullPointerException("mTuner.openFilter() failed!!");
+            }
 
             //create video event queue
             mVideoEventQueue = new ArrayDeque<>();
         }
 
-        public void closeVideoFilter() {
-            //clear before new setup
+        private void closeVideoFilter() {
             if (mVideoFilter != null) {
+                Log.i(TAG, "closeVideoFilter()  ...");
+
                 mVideoFilter.flush();
                 mVideoFilter.stop();
                 mVideoFilter.close();
                 mVideoFilter = null;
             }
+
             //clear event queue
-            mVideoEventQueue = null;
+            if (mVideoEventQueue != null) {
+                mVideoEventQueue = null;
+            }
         }
 
         private FilterCallback getFilterCallback() {
@@ -231,20 +276,17 @@ class TunerHalControl {
             };
         }
 
-        public boolean openCodec(String mime, int width, int high, boolean bASync) {
-            Log.i(TAG, "openCodec(): mime=" + mime + ", width=" + width + ", high=" + high + ", bASync=" + bASync);
+        private boolean openVideoCodec(String mime, int width, int height) {
+            Log.i(TAG, "openCodec(): mime=" + mime + ", width=" + width + ", height=" + height);
             //check previous resource
             closeCodec();
-
-            //save sync mode
-            mCodecASyncMode = bASync;
 
             try {
                 //create  input buffer queue
                 mAvailableInputBuffers = new ArrayDeque<>();
 
                 mCodec = MediaCodec.createDecoderByType(mime);
-                MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
+                MediaFormat mf = MediaFormat.createVideoFormat(mime, width, height);
                 //create callback for asynchronous mode
                 if (mCodecASyncMode) {
                     mCodec.setCallback(getCodecCallback());
@@ -252,19 +294,15 @@ class TunerHalControl {
 
                 mCodec.configure(mf, mSurface, null, 0);
                 //start codec
-                mCodec.start();
+                //mCodec.start();
             } catch (IOException e) {
                 Log.e(TAG, "[openCodec] Error: " + e.getMessage());
             }
 
-            if (mCodec == null) {
-                Log.e(TAG, "[openCodec] null codec!");
-                return false;
-            }
             return true;
         }
 
-        public void closeCodec() {
+        private void closeCodec() {
             if (mCodec != null) {
                 Log.i(TAG, "closeCodec()  ...");
 
@@ -487,7 +525,6 @@ class TunerHalControl {
         private MediaCodecWrapper mCodecWrapper = null;
         private boolean mSkipFirstFrame = false;
         private Thread mPlaybackThread = null;
-        private boolean mCodecASyncMode = true;
         private static final int STATE_STOP = 0;
         private static final int STATE_PLAY = 1;
         private TunerCodec mTunerCodec = null;
@@ -804,16 +841,15 @@ class TunerHalControl {
                 throw new NullPointerException("Create TunerCodec failed!!");
             }
 
-            //open video codec
-            mTunerCodec.openCodec(MediaFormat.MIMETYPE_VIDEO_MPEG2, 1920, 1080, true);
+            //open tuner
+            mTunerCodec.openTuner();
+            //start tune
+            mTunerCodec.startTune(FREQUENCY);
 
-            mTunerCodec.openTuner(FREQUENCY);
-            mTunerCodec.openVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
-
-            if (mCodecASyncMode == false) {
-                //create decode thread
-                mTunerCodec.openDecodeThread();
-            }
+            //open video codec and filter
+            mTunerCodec.openVideo(MediaFormat.MIMETYPE_VIDEO_MPEG2, VIDEO_WIDTH, VIDEO_HEIGHT, FILTER_BUFFER_SIZE);
+            //start video codec and filter
+            mTunerCodec.startVideo(VIDEO_TPID);
 
             //set play state
             mTunerCodec.setState(STATE_PLAY);
