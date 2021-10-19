@@ -576,18 +576,9 @@ class TunerHalControl {
                 public void onFilterEvent(Filter filter, FilterEvent[] events) {
                     for (FilterEvent e : events) {
                         if (e instanceof MediaEvent) {
-                            //different thread, check is running first
-                             synchronized (mStateLock) {
-                                if (mState == STATE_PLAY) {
-                                    //queue event
-                                    mVideoEventQueue.add((MediaEvent)e);
-                                    runDecodeProcess();
-                                } else {
-                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED, release event!!");
-                                    MediaEvent me = (MediaEvent)e;
-                                    me.release();
-                                }
-                            }
+                            //queue event & run decode process
+                            mVideoEventQueue.add((MediaEvent)e);
+                            runDecodeProcess();
                         } else if (e instanceof SectionEvent) {
                             //testSectionEvent(filter, (SectionEvent) e);
                         } else if (e instanceof TemiEvent) {
@@ -664,6 +655,18 @@ class TunerHalControl {
         private void runDecodeProcess() {
             //[NOTE] this function maybe run by TunerHal HandlerThread or tuner Hal's Binder thread
             Log.d(TAG, "run runDecodeProcess() in thread:" + Thread.currentThread().getName());
+
+            synchronized (mStateLock) {
+                if (mState == STATE_STOP) {
+                    Log.d(TAG, "Playback is STOPPED, release event and return!!");
+
+                    for (int i=0; i < mVideoEventQueue.size(); i++) {
+                        MediaEvent me = mVideoEventQueue.pollFirst();
+                        me.release();
+                    }
+                    return;
+                }
+            }
 
             //check input buffer queue and event queue first
             if ((mVideoEventQueue.size() == 0) || (mAvailableInputBuffers.size() == 0)) {
