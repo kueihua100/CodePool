@@ -60,12 +60,16 @@ class TunerHalControl {
         private boolean mSkipFirstFrame = false;
         private Thread mPlaybackThread = null;
         private MediaCodec mCodec = null;
-        private boolean mUseCodecWrapper = false;
-        private Deque<MediaEvent> mVideoEventQueue;
+        private boolean mCodecASyncMode = true;
         private static final int STATE_STOP = 0;
         private static final int STATE_PLAY = 1;
         final private Object mStateLock;
         private int mState = STATE_STOP;
+
+        private Deque<MediaEvent> mVideoEventQueue;
+        // Indices of the input buffers that are currently available for writing. We'll
+        // consume these in the order they were dequeued from the codec.
+        private Deque<Integer> mAvailableInputBuffers;
 
         public MyHadler(Looper looper) {
             super(looper);
@@ -355,22 +359,74 @@ class TunerHalControl {
             openTuner(FREQUENCY);
             openVideoFilter(MediaFormat.MIMETYPE_VIDEO_MPEG2);
 
-            //create decode thread
-            openDecodeThread();
+            if (mCodecASyncMode == false) {
+                //create decode thread
+                openDecodeThread();
+            }
+        }
+
+        private final MediaCodec.Callback getCodecCallback() {
+            return new MediaCodec.Callback() {
+                @Override
+                public void onInputBufferAvailable(MediaCodec codec, int index) {
+                    Log.d(TAG, "onInputBufferAvailable(): free input index= " + index);
+                    mAvailableInputBuffers.add(index);
+                    runDecodeProcess();
+                }
+
+                @Override
+                public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
+                    //ByteBuffer outputBuffer = codec.getOutputBuffer(index);
+                    //MediaFormat bufferFormat = codec.getOutputFormat(index); // option A
+                    //bufferFormat is equivalent to mOutputFormat
+                    //outputBuffer is ready to be processed or rendered.
+                    Log.d(TAG, "onOutputBufferAvailable(): free output index= " + index);
+                    if (codec != mCodec) {
+                        Log.w(TAG, "got different codec: " + codec);
+                        return;
+                    }
+                    mCodec.releaseOutputBuffer(index, true);
+                }
+
+                @Override
+                public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+                    //Subsequent data will conform to new format.
+                    //Can ignore if using getOutputFormat(outputBufferId)
+                    //mOutputFormat = format; // option B
+                    Log.d(TAG, "onOutputFormatChanged():  format= " + format);
+                    if (codec != mCodec) {
+                        Log.w(TAG, "got different codec: " + codec);
+                        return;
+                    }
+                }
+
+                @Override
+                public void onError(MediaCodec codec, MediaCodec.CodecException e) {
+                    Log.d(TAG, "onError():  e= " + e);
+                    if (codec != mCodec) {
+                        Log.w(TAG, "got different codec: " + codec);
+                        return;
+                    }
+                }
+            };
         }
 
         private boolean openCodec(String mime, int width, int high) {
             Log.i(TAG, "openCodec()");
-
-            if (mCodec != null) {
-                mCodec.stop();
-                mCodec.release();
-                mCodec = null;
-            }
+            //check previous resource
+            closeCodec();
 
             try {
+                //create  input buffer queue
+                mAvailableInputBuffers = new ArrayDeque<>();
+
                 mCodec = MediaCodec.createDecoderByType(mime);
                 MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
+                //create callback for asynchronous mode
+                if (mCodecASyncMode) {
+                    mCodec.setCallback(getCodecCallback());
+                }
+
                 mCodec.configure(mf, mSurface, null, 0);
                 //start codec
                 mCodec.start();
@@ -387,6 +443,12 @@ class TunerHalControl {
 
         private void closeCodec() {
             if (mCodec != null) {
+                Log.i(TAG, "closeCodec()  ...");
+
+                //clear  input buffer queue
+                mAvailableInputBuffers.clear();
+                mAvailableInputBuffers = null;
+                //stop & close codec
                 mCodec.stop();
                 mCodec.release();
                 mCodec = null;
@@ -396,16 +458,8 @@ class TunerHalControl {
         private boolean openCodecWrapper(String mime, int width, int high) {
             Log.i(TAG, "openCodecWrapper()");
 
-            if (mCodecWrapper != null ) {
-                mCodecWrapper.stopAndRelease();
-                mCodecWrapper = null;
-                //mExtractor.release();
-            }
-
-            if (mExtractor != null) {
-                mExtractor.release();
-                mExtractor = null;
-            }
+            //check previous resource
+            closeCodecWrapper();
 
             MediaFormat mf = MediaFormat.createVideoFormat(mime, width, high);
             Log.d(TAG, "[openCodecWrapper]: mime:" + mime + ", media format:" + mf.toString());
@@ -429,6 +483,8 @@ class TunerHalControl {
             }
 
             if (mCodecWrapper != null ) {
+                Log.i(TAG, "closeCodecWrapper()  ...");
+
                 mCodecWrapper.stopAndRelease();
                 mCodecWrapper = null;
                 //mExtractor.release();
@@ -525,8 +581,11 @@ class TunerHalControl {
                                 if (mState == STATE_PLAY) {
                                     //queue event
                                     mVideoEventQueue.add((MediaEvent)e);
+                                    runDecodeProcess();
                                 } else {
-                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED!!");
+                                    Log.d(TAG, "getFilterCallback(): Playback is STOPPED, release event!!");
+                                    MediaEvent me = (MediaEvent)e;
+                                    me.release();
                                 }
                             }
                         } else if (e instanceof SectionEvent) {
@@ -600,6 +659,41 @@ class TunerHalControl {
 
             MediaCodec.BufferInfo out_bufferInfo = new MediaCodec.BufferInfo();
             mCodecWrapper.peekSample(out_bufferInfo);
+        }
+
+        private void runDecodeProcess() {
+            //[NOTE] this function maybe run by TunerHal HandlerThread or tuner Hal's Binder thread
+            Log.d(TAG, "run runDecodeProcess() in thread:" + Thread.currentThread().getName());
+
+            //check input buffer queue and event queue first
+            if ((mVideoEventQueue.size() == 0) || (mAvailableInputBuffers.size() == 0)) {
+                Log.d(TAG, "runDecodeProcess():" +
+                                  "mVideoEventQueue.size()=" + mVideoEventQueue.size() +
+                                  ", mAvailableInputBuffers.size()=" + mAvailableInputBuffers.size());
+                    return;
+            }
+
+            //fill inputBuffer with valid data
+            int index = mAvailableInputBuffers.pollFirst();
+            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+            MediaEvent me = mVideoEventQueue.pollFirst();
+
+            ByteBuffer sampleData = me.getLinearBlock().map();
+            int sampleSize = (int) me.getDataLength();
+            long pts = me.getPts();
+
+            Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+            Log.d(TAG, " me.getDataLength()= " + sampleSize);
+            Log.d(TAG, " me.getPts()= " + pts);
+
+            //fill codec input buffer
+            inputBuffer.clear();
+            inputBuffer.put(sampleData);
+            mCodec.queueInputBuffer(index, 0, sampleSize, pts, 0);
+
+            //release ion buffer
+            me.getLinearBlock().recycle();
+            me.release();
         }
 
         private void queueInputBuffer_wait(MediaEvent me) {
@@ -729,6 +823,7 @@ class TunerHalControl {
         }
 
         private void openDecodeThread() {
+            Log.i(TAG, "openDecodeThread()");
             //create decode thread
             mPlaybackThread =new Thread(this::runDecodeLoop, "DemoTunerHal-decode-thread");
             //start thread
