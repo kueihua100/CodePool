@@ -20,12 +20,12 @@
         android:text="Stop Play" />
 
     <Button
-        android:id="@+id/Skip1stFrame"
+        android:id="@+id/ReadProgramInfo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="160dp"
-        android:layout_marginTop="80dp"
-        android:text="Skip 1st Frame" />
+        android:layout_marginTop="20dp"
+        android:text="Read Program Info" />
 
     <Button
         android:id="@+id/PlayVideoThread"

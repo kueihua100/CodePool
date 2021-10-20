@@ -35,7 +35,7 @@ class TunerHalControl {
     private static final int MSG_PLAY_TV_CHANNEL = 1;
     private static final int MSG_PLAY_VIDEO_FILE = 2;
     private static final int MSG_STOP_PLAY = 3;
-    private static final int MSG_SKIP_FIRST_FRAME = 4;
+    private static final int MSG_READ_PROGRAM_INFO = 4;
 
     private final HandlerThread mHandlerThread;
     private final Handler mHandler;
@@ -523,7 +523,6 @@ class TunerHalControl {
         private TimeAnimator mTimeAnimator = null;
         private MediaExtractor mExtractor = null;
         private MediaCodecWrapper mCodecWrapper = null;
-        private boolean mSkipFirstFrame = false;
         private Thread mPlaybackThread = null;
         private static final int STATE_STOP = 0;
         private static final int STATE_PLAY = 1;
@@ -552,12 +551,8 @@ class TunerHalControl {
                     Log.d(TAG, "case MSG_STOP_PLAY");
                     onStopPlay();
                     break;
-                case MSG_SKIP_FIRST_FRAME:
-                    Log.d(TAG, "case MSG_SKIP_FIRST_FRAME");
-                    if (mSkipFirstFrame == false) {
-                        mSkipFirstFrame = true;
-                    }
-                    Log.i(TAG, "--- mSkipFirstFrame=" + mSkipFirstFrame);
+                case MSG_READ_PROGRAM_INFO:
+                    Log.d(TAG, "case MSG_READ_PROGRAM_INFO");
                     break;
                 default:
                     Log.d(TAG, "Why in [default] case??");
@@ -674,14 +669,7 @@ class TunerHalControl {
                     if (!isEos) {
                         // Try to submit the sample to the codec and if successful advance the
                         // extractor to the next available sample to read.
-                        boolean result = false;
-                        if (mSkipFirstFrame == true) {
-                            Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
-                            mSkipFirstFrame = false;
-                            result = true;
-                        } else {
-                            result = mCodecWrapper.writeSample(mExtractor, false, mExtractor.getSampleTime(), mExtractor.getSampleFlags());
-                        }
+                        boolean result = mCodecWrapper.writeSample(mExtractor, false, mExtractor.getSampleTime(), mExtractor.getSampleFlags());
 
                         if (result) {
                             // Advancing the extractor is a blocking operation and it MUST be
@@ -779,15 +767,7 @@ class TunerHalControl {
                         if (!isEos) {
                             // Try to submit the sample to the codec and if successful advance the
                             // extractor to the next available sample to read.
-                            boolean result = false;
-                            if (mSkipFirstFrame == true) {
-                                Log.i(TAG, "99999999999999999999999999999 skip 1st frame!!");
-                                mSkipFirstFrame = false;
-                                result = true;
-                            } else {
-                                result = mCodecWrapper.writeSample(mExtractor, false,
-                                        mExtractor.getSampleTime(), mExtractor.getSampleFlags());
-                            }
+                            boolean result = mCodecWrapper.writeSample(mExtractor, false, mExtractor.getSampleTime(), mExtractor.getSampleFlags());
 
                             if (result) {
                                 // Advancing the extractor is a blocking operation and it MUST be
@@ -801,6 +781,10 @@ class TunerHalControl {
                         // rendered and is not zero sized End-of-Stream record.
                         MediaCodec.BufferInfo out_bufferInfo = new MediaCodec.BufferInfo();
                         mCodecWrapper.peekSample(out_bufferInfo);
+
+                        String strDbg = String.format(" presentationTimeUs=0x%x (%x), totalTime=0x%x, , deltaTime=0x%x",
+                                                    out_bufferInfo.presentationTimeUs, (out_bufferInfo.presentationTimeUs / 1000), totalTime, deltaTime);
+                        Log.i(TAG, " startPlayback(): "  + strDbg);
 
                         // BEGIN_INCLUDE(render_sample)
                         if (out_bufferInfo.size <= 0 && isEos) {
@@ -892,10 +876,10 @@ class TunerHalControl {
         mHandler.sendEmptyMessage(MSG_STOP_PLAY);
     }
 
-    public void skipFirstFrame(TextureView view) {
+    public void readProgramInfo(TextureView view) {
         mVideoView = view;
         mContext = view.getContext();
         mSurface = new Surface(mVideoView.getSurfaceTexture());
-        mHandler.sendEmptyMessage(MSG_SKIP_FIRST_FRAME);
+        mHandler.sendEmptyMessage(MSG_READ_PROGRAM_INFO);
     }
 }

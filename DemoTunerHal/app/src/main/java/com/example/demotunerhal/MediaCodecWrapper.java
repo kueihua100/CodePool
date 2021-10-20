@@ -35,6 +35,7 @@ import java.lang.String;
  */
 public class MediaCodecWrapper {
     private static final String TAG = "DemoTunerHal-codecWrapper";
+    private static final boolean DEBUG = false;
 
     // Handler to use for {@code OutputSampleListener} and {code OutputFormatChangedListener}
     // callbacks
@@ -256,11 +257,14 @@ public class MediaCodecWrapper {
             if (size <= 0) {
                 flags |= MediaCodec.BUFFER_FLAG_END_OF_STREAM;
             }
-            //
-            int tem_ref = (buffer.get(4) << 2) | ((buffer.get(5) & 0xC0) >> 6);
-            int pic_type = (buffer.get(5) & 0x38) >> 3;
-            String hdrData = String.format(" header_byte[%x-%x-%x-%x] tmp_ref=%d, pic_type=%d", buffer.get(0), buffer.get(1), buffer.get(2), buffer.get(3), tem_ref, pic_type);
-            Log.i(TAG, "[writeSample]" + hdrData);
+
+            if (DEBUG) {
+                int tem_ref = (buffer.get(4) << 2) | ((buffer.get(5) & 0xC0) >> 6);
+                int pic_type = (buffer.get(5) & 0x38) >> 3;
+                String hdrData = String.format(" header_byte[%x-%x-%x-%x] tmp_ref=%d, pic_type=%d",
+                                                        buffer.get(0), buffer.get(1), buffer.get(2), buffer.get(3), tem_ref, pic_type);
+                Log.i(TAG, "[writeSample]" + hdrData);
+            }
             String str = String.format(" pts=0x%x, size=0x%x", presentationTimeUs, size);
             Log.i(TAG, "[writeSample]"  + str);
             // Submit the buffer to the codec for decoding. The presentationTimeUs
@@ -316,6 +320,7 @@ public class MediaCodecWrapper {
         // dequeue available buffers and synchronize our data structures with the codec.
         update();
         if (!mAvailableOutputBuffers.isEmpty()) {
+            Log.i(TAG, "[popSample] releaseOutputBuffer()...");
             int index = mAvailableOutputBuffers.remove();
 
             // releases the buffer back to the codec

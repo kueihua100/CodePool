@@ -77,14 +77,14 @@ public class MainActivity extends Activity {
                 }
         );
 
-        Button skipFirstFrameButton = findViewById(R.id.Skip1stFrame);
-        skipFirstFrameButton.setOnClickListener(
+        Button readProgramInfoButton = findViewById(R.id.ReadProgramInfo);
+        readProgramInfoButton.setOnClickListener(
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        Log.d(TAG, "Skip 1st Frame Button clicked!!");
-                        mTextView.setText("Skip 1st Frame...");
-                        mTunerHalCtrl.skipFirstFrame(mVideoView);
+                        Log.d(TAG, "Read Program Info Button clicked!!");
+                        mTextView.setText("Read Program Info...");
+                        mTunerHalCtrl.readProgramInfo(mVideoView);
                     }
                 }
         );
