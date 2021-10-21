@@ -27,6 +27,16 @@ import android.media.tv.tuner.*;
 import android.media.tv.tuner.filter.*;
 import android.media.tv.tuner.frontend.*;
 
+//------------------------------------------------
+//for TvProgramConfig class
+import android.util.Xml;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 class TunerHalControl {
     private static final String TAG = "DemoTunerHal-ctrl";
@@ -73,10 +83,13 @@ class TunerHalControl {
 
         private Tuner mTuner;
         private Filter mVideoFilter;
+        private TvProgramConfig mTvProgramConfig;
+
 
         public TunerCodec() {
             Log.i(TAG, "------ TunerCodec()");
             mStateLock = new Object();
+            mTvProgramConfig = new TvProgramConfig();
         }
 
         public void setState(int state) {
@@ -165,11 +178,11 @@ class TunerHalControl {
             });
         }
 
-        public void startTune(int frequency) {
-            Log.i(TAG, "------ startTuner(): frequency=" + frequency);
+        public void startTune() {
+            Log.i(TAG, "------ startTuner(): frequency=" + mTvProgramConfig.mTunerFrequency);
 
             //start tune
-            FrontendSettings settings = createAtscFrontendSettings(frequency);
+            FrontendSettings settings = createAtscFrontendSettings(mTvProgramConfig.mTunerFrequency);
             mTuner.tune(settings);
         }
 
@@ -183,24 +196,24 @@ class TunerHalControl {
             }
         }
 
-        public boolean openVideo(String mime, int width, int height, long filterBufferSize) {
+        public boolean openVideo() {
             //create video codec according to mine, width, height
-            openVideoCodec(mime, width, height);
+            openVideoCodec(mTvProgramConfig.mVideoFormat, mTvProgramConfig.mVideoWidth, mTvProgramConfig.mVideoHeight);
 
             //create video filter and video event queue
-            openVideoFilter(filterBufferSize);
+            openVideoFilter(mTvProgramConfig.mVideoFilterBuffer);
 
             return true;
         }
 
-         public int startVideo(int pid) {
-            Log.i(TAG, "------ startVideo(): pid=" + pid);
+         public int startVideo() {
+            Log.i(TAG, "------ startVideo(): pid=" + mTvProgramConfig.mVideoPid);
 
             //start codec
             mCodec.start();
 
             //config video filter
-            FilterConfiguration config = createVideoConfiguration(pid);
+            FilterConfiguration config = createVideoConfiguration(mTvProgramConfig.mVideoPid);
             mVideoFilter.configure(config);
 
             //start video filter
@@ -363,10 +376,10 @@ class TunerHalControl {
         }
 
         private void runDecodeProcess() {
-            //[NOTE] this function maybe run by TunerHal HandlerThread or tuner Hal's Binder thread
-            Log.d(TAG, "run runDecodeProcess() in thread:" + Thread.currentThread().getName());
-
             synchronized (mStateLock) {
+                //[NOTE] this function maybe run by TunerHal HandlerThread or tuner Hal's Binder thread
+                Log.d(TAG, "run runDecodeProcess() in thread:" + Thread.currentThread().getName());
+
                 if (mState == STATE_STOP) {
                     Log.d(TAG, "Playback is STOPPED, release event and return!!");
 
@@ -376,37 +389,37 @@ class TunerHalControl {
                     }
                     return;
                 }
+
+                //check input buffer queue and event queue first
+                if ((mVideoEventQueue.size() == 0) || (mAvailableInputBuffers.size() == 0)) {
+                    Log.d(TAG, "runDecodeProcess():" +
+                                      "mVideoEventQueue.size()=" + mVideoEventQueue.size() +
+                                      ", mAvailableInputBuffers.size()=" + mAvailableInputBuffers.size());
+                        return;
+                }
+
+                //fill inputBuffer with valid data
+                int index = mAvailableInputBuffers.pollFirst();
+                ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+                MediaEvent me = mVideoEventQueue.pollFirst();
+
+                ByteBuffer sampleData = me.getLinearBlock().map();
+                int sampleSize = (int) me.getDataLength();
+                long pts = me.getPts();
+
+                Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
+                Log.d(TAG, " me.getDataLength()= " + sampleSize);
+                Log.d(TAG, " me.getPts()= " + pts);
+
+                //fill codec input buffer
+                inputBuffer.clear();
+                inputBuffer.put(sampleData);
+                mCodec.queueInputBuffer(index, 0, sampleSize, pts, 0);
+
+                //release ion buffer
+                me.getLinearBlock().recycle();
+                me.release();
             }
-
-            //check input buffer queue and event queue first
-            if ((mVideoEventQueue.size() == 0) || (mAvailableInputBuffers.size() == 0)) {
-                Log.d(TAG, "runDecodeProcess():" +
-                                  "mVideoEventQueue.size()=" + mVideoEventQueue.size() +
-                                  ", mAvailableInputBuffers.size()=" + mAvailableInputBuffers.size());
-                    return;
-            }
-
-            //fill inputBuffer with valid data
-            int index = mAvailableInputBuffers.pollFirst();
-            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
-            MediaEvent me = mVideoEventQueue.pollFirst();
-
-            ByteBuffer sampleData = me.getLinearBlock().map();
-            int sampleSize = (int) me.getDataLength();
-            long pts = me.getPts();
-
-            Log.d(TAG, " me.getAvDataId()= " + me.getAvDataId());
-            Log.d(TAG, " me.getDataLength()= " + sampleSize);
-            Log.d(TAG, " me.getPts()= " + pts);
-
-            //fill codec input buffer
-            inputBuffer.clear();
-            inputBuffer.put(sampleData);
-            mCodec.queueInputBuffer(index, 0, sampleSize, pts, 0);
-
-            //release ion buffer
-            me.getLinearBlock().recycle();
-            me.release();
         }
 
         private boolean queueInputBuffer(MediaEvent me, long timeoutUs, int timeOutCount) {
@@ -517,6 +530,119 @@ class TunerHalControl {
                 }
             }
         }
+
+        public class TvProgramConfig {
+            private static final boolean DEBUG = false;
+
+            //[NOTE] Needs to set sepolicy as permissive: setenforce 0
+            private static final String PATH_TO_TV_CONFIG_XML =  "/data/local/tmp/tvProgramConfig.xml";
+            public int mTunerFrequency = 195000000;
+            public int mVideoPid = 481;
+            public String mVideoFormat = MediaFormat.MIMETYPE_VIDEO_MPEG2;
+            public int mVideoWidth = 1920;
+            public int mVideoHeight = 1080;
+            public int mVideoFilterBuffer = 2*1024*1024;
+            public int mAudioPid = 484;
+            public String mAudioFormat = MediaFormat.MIMETYPE_AUDIO_AC3;
+            public int mAudioFilterBuffer = 2*1024*1024;
+            //xml format:
+            //<?xml version="1.0" encoding="UTF-8"?>
+            //<config version="1.0" xmlns:xi="http://www.w3.org/2001/XMLSchema">
+            //    <Tuner frequency="195000000">
+            //    <Video pid="481" format="video/mpeg2" width="1920" height="1080" filterBuffer="2097152" />
+            //    <Audio pid="484" format="audio/ac3" filterBuffer="2097152" />
+            //</config>
+
+            public TvProgramConfig() {
+                parse();
+            }
+
+            public void parse() {
+                File file = new File(PATH_TO_TV_CONFIG_XML);
+                if (file.exists()) {
+                    try {
+                        InputStream in = new FileInputStream(file);
+                        parseInternal(in);
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error reading file: " + file, e);
+                    } catch (XmlPullParserException e) {
+                        Log.e(TAG, "Unable to parse file: " + file, e);
+                    }
+                } else {
+                    Log.i(TAG, "No tv program config file(/tmp/tvProgramConfig.xml) . Using default setting: ");
+                }
+
+                String string;
+                string = String.format("Video (pid=%d, format=%s, width=%d, height=%d)",
+                                        mVideoPid, mVideoFormat, mVideoWidth, mVideoHeight);
+                Log.i(TAG, string);
+                string = String.format("Audio (pid=%d, format=%s)", mAudioPid, mAudioFormat);
+                Log.i(TAG, string);
+            }
+
+            protected void parseInternal(InputStream in)
+                    throws IOException, XmlPullParserException {
+                try {
+                    XmlPullParser parser = Xml.newPullParser();
+                    parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+                    parser.setInput(in, null);
+                    parser.nextTag();
+                    readConfig(parser);
+                    in.close();
+                } catch (IOException | XmlPullParserException e) {
+                    throw e;
+                }
+            }
+
+            private void readConfig(XmlPullParser parser)
+                    throws XmlPullParserException, IOException {
+                parser.require(XmlPullParser.START_TAG, null, "config");
+                while (parser.next() != XmlPullParser.END_TAG) {
+                    if (parser.getEventType() != XmlPullParser.START_TAG) {
+                        continue;
+                    }
+                    String name = parser.getName();
+                    if (name.equals("Tuner")) {
+                        mTunerFrequency =  Integer.valueOf(parser.getAttributeValue(null, "frequency"));
+                        parser.nextTag();
+                        parser.require(XmlPullParser.END_TAG, null, name);
+                    } else  if (name.equals("Video")) {
+                        mVideoPid = Integer.valueOf(parser.getAttributeValue(null, "pid"));
+                        mVideoFormat = parser.getAttributeValue(null, "format");
+                        mVideoWidth = Integer.valueOf(parser.getAttributeValue(null, "width"));
+                        mVideoHeight =  Integer.valueOf(parser.getAttributeValue(null, "height"));
+                        mVideoFilterBuffer =  Integer.valueOf(parser.getAttributeValue(null, "filterBuffer"));
+                        parser.nextTag();
+                        parser.require(XmlPullParser.END_TAG, null, name);
+                    } else  if (name.equals("Audio")) {
+                        mAudioPid = Integer.valueOf(parser.getAttributeValue(null, "pid"));
+                        mAudioFormat = parser.getAttributeValue(null, "format");
+                        mAudioFilterBuffer =  Integer.valueOf(parser.getAttributeValue(null, "filterBuffer"));
+                        parser.nextTag();
+                        parser.require(XmlPullParser.END_TAG, null, name);
+                    } else {
+                        skip(parser);
+                    }
+                }
+            }
+
+            private void skip(XmlPullParser parser) throws XmlPullParserException, IOException {
+                if (parser.getEventType() != XmlPullParser.START_TAG) {
+                    throw new IllegalStateException();
+                }
+                int depth = 1;
+                while (depth != 0) {
+                    switch (parser.next()) {
+                        case XmlPullParser.END_TAG:
+                            depth--;
+                            break;
+                        case XmlPullParser.START_TAG:
+                            depth++;
+                            break;
+                    }
+                }
+            }
+        }
     }
 
     private class MyHadler extends Handler {
@@ -553,6 +679,7 @@ class TunerHalControl {
                     break;
                 case MSG_READ_PROGRAM_INFO:
                     Log.d(TAG, "case MSG_READ_PROGRAM_INFO");
+                    onReadProgramConfig();
                     break;
                 default:
                     Log.d(TAG, "Why in [default] case??");
@@ -626,7 +753,8 @@ class TunerHalControl {
 
             // Construct a URI that points to the video resource that we want to play
             //[NOTE]
-            // rename xxx.ts to xxx.mp4, otherwise cannot find the video file
+            //1. rename xxx.ts to xxx.mp4, otherwise cannot find the video file from android.resource://
+            //2. from /data/local/tmp/xxx.ts ==>  Needs to set sepolicy as permissive: setenforce 0
             String uri = "android.resource://"
                     + mContext.getPackageName() + "/"
                     + R.raw.tv_ts;
@@ -711,7 +839,8 @@ class TunerHalControl {
 
             // Construct a URI that points to the video resource that we want to play
             //[NOTE]
-            // rename xxx.ts to xxx.mp4, otherwise cannot find the video file
+            //1. rename xxx.ts to xxx.mp4, otherwise cannot find the video file from android.resource://
+            //2. from /data/local/tmp/xxx.ts ==>  Needs to set sepolicy as permissive: setenforce 0
             String uri = "android.resource://"
                     + mContext.getPackageName() + "/"
                     + R.raw.tv_ts;
@@ -810,9 +939,9 @@ class TunerHalControl {
             }
         }
 
-    //------------------------------------------------------------
-    //------------------------------------------------------------
-    //------------------------------------------------------------
+//------------------------------------------------------------
+//------------------------------------------------------------
+//------------------------------------------------------------
         public void onPlayTv() {
             Log.i(TAG, "onPlayTv()");
 
@@ -821,22 +950,30 @@ class TunerHalControl {
                 mTunerCodec = null;
             }
 
-            if (( mTunerCodec = new TunerCodec()) == null) {
+            if ((mTunerCodec = new TunerCodec()) == null) {
                 throw new NullPointerException("Create TunerCodec failed!!");
             }
 
             //open tuner
             mTunerCodec.openTuner();
             //start tune
-            mTunerCodec.startTune(FREQUENCY);
+            mTunerCodec.startTune();
 
             //open video codec and filter
-            mTunerCodec.openVideo(MediaFormat.MIMETYPE_VIDEO_MPEG2, VIDEO_WIDTH, VIDEO_HEIGHT, FILTER_BUFFER_SIZE);
+            mTunerCodec.openVideo();
             //start video codec and filter
-            mTunerCodec.startVideo(VIDEO_TPID);
+            mTunerCodec.startVideo();
 
             //set play state
             mTunerCodec.setState(STATE_PLAY);
+        }
+
+        public void onReadProgramConfig() {
+            Log.i(TAG, "onReadProgramConfig()");
+            if (mTunerCodec != null) {
+                mTunerCodec.mTvProgramConfig.parse();
+            }
+            mTunerCodec = new TunerCodec();
         }
     }
 
