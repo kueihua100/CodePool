@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
+import java.util.ArrayList;
 
 import android.media.tv.tuner.*;
 import android.media.tv.tuner.filter.*;
@@ -65,7 +66,7 @@ class TunerHalControl {
 
     public class TunerCodec {
         private static final String TAG = "TunerCodec";
-        private static final boolean DEBUG = true;
+        private static final boolean DEBUG = false;
         private String mMediaType;
 
         private boolean mCodecASyncMode = true;
@@ -76,12 +77,11 @@ class TunerHalControl {
         private Deque<Integer> mAvailableInputBuffers;
         // Indices of the output buffers that currently hold valid data, in the order
         // they were produced by the codec.
-        private Deque<Integer> mAvailableOutputBuffers;
+        private ArrayList<Integer> mAvailableOutputBuffers;
         // Information about each output buffer, by index. Each entry in this array
         // is valid if and only if its index is currently contained in mAvailableOutputBuffers.
-        private Deque<MediaCodec.BufferInfo> mOutputBufferInfo;
-        private long mVideoStartCurrtTime = 0;
-        private long mVideoStartPts = 0;
+        private ArrayList<MediaCodec.BufferInfo> mOutputBufferInfo;
+        private long mStartTimeDiff = 0;
 
         private static final int STATE_STOP = 0;
         private static final int STATE_PLAY = 1;
@@ -232,14 +232,14 @@ class TunerHalControl {
         }
 
         public void closeVideo() {
+            //close decodec thread
+            closeDecodeThread();
+
             //close codec
             closeVideoCodec();
 
             //clear video filter
             closeVideoFilter();
-
-            //close decodec thread
-            closeDecodeThread();
         }
 
         private void openVideoFilter(long filterBufferSize) {
@@ -265,6 +265,13 @@ class TunerHalControl {
         private void closeVideoFilter() {
             if (mVideoFilter != null) {
                 Log.i(TAG, "closeVideoFilter()  ...");
+
+                //clear not used media event
+                //[NOTE] could cause tuner hal hang
+                //for (int i=0; i < mVideoEventQueue.size(); i++) {
+                //    MediaEvent me = mVideoEventQueue.pollFirst();
+                //    me.release();
+                //}
 
                 mVideoFilter.flush();
                 mVideoFilter.stop();
@@ -311,8 +318,8 @@ class TunerHalControl {
             try {
                 //create  input/output buffer queue
                 mAvailableInputBuffers = new ArrayDeque<>();
-                mAvailableOutputBuffers = new ArrayDeque<>();
-                mOutputBufferInfo = new ArrayDeque<>();
+                mAvailableOutputBuffers = new ArrayList<>();
+                mOutputBufferInfo = new ArrayList<>();
 
                 mCodec = MediaCodec.createDecoderByType(mime);
                 MediaFormat mf = MediaFormat.createVideoFormat(mime, width, height);
@@ -335,6 +342,11 @@ class TunerHalControl {
             if (mCodec != null) {
                 Log.i(TAG, "closeVideoCodec()  ...");
 
+                //stop & close codec
+                mCodec.stop();
+                mCodec.release();
+                mCodec = null;
+
                 //clear  input/output buffer queue
                 mAvailableInputBuffers.clear();
                 mAvailableInputBuffers = null;
@@ -344,11 +356,6 @@ class TunerHalControl {
 
                 mOutputBufferInfo.clear();
                 mOutputBufferInfo = null;
-
-                //stop & close codec
-                mCodec.stop();
-                mCodec.release();
-                mCodec = null;
             }
         }
 
@@ -373,16 +380,15 @@ class TunerHalControl {
                         Log.w(TAG, "got different codec: " + codec);
                         return;
                     }
-                    Log.d(TAG, "onOutputBufferAvailable(): free output index= " + index);
-                    //mCodec.releaseOutputBuffer(index, true);
                     synchronized (mStateLock) {
                         if (DEBUG) {
-                            Log.d(TAG, String.format("onOutputBufferAvailable() (in %s): presentationTimeUs=0x%x (%d)",
-                                                        Thread.currentThread().getName(), info.presentationTimeUs, System.currentTimeMillis()));
+                            Log.d(TAG, String.format("onOutputBufferAvailable():  free output index=%d, presentationTimeUs=0x%x (%d)",
+                                            index, info.presentationTimeUs, System.currentTimeMillis()));
                         }
-                        mOutputBufferInfo.add(info);
                         mAvailableOutputBuffers.add(index);
+                        mOutputBufferInfo.add(info);
                     }
+                    //mCodec.releaseOutputBuffer(index, true);
                 }
 
                 @Override
@@ -555,40 +561,61 @@ class TunerHalControl {
         }
 
         private void runDecodeLoop() {
-            //init start time
-            mVideoStartCurrtTime = 0;
-            mVideoStartPts = 0;
+            //init mStartTimeDiff
+            mStartTimeDiff = 0;
 
             while (!Thread.interrupted()) {
-                //check event queue and start decode process
-                /*
-                 if (!mVideoEventQueue.isEmpty()) {
-                    if (queueInputBuffer(mVideoEventQueue.getFirst(), 1000, 10) == true) {
-                        //remove consumed event
-                        mVideoEventQueue.pollFirst();
-                    }
-                    releaseOutputBuffer(1000, 10);
-                }*/
-
                 //check output buffer is ready to rendor
                 synchronized (mStateLock) {
                     if (!mAvailableOutputBuffers.isEmpty()) {
-                        MediaCodec.BufferInfo bufferInfo = mOutputBufferInfo.getFirst();
-
-                        if ((mVideoStartCurrtTime == 0) && (mVideoStartPts == 0)) {
-                            mVideoStartCurrtTime = System.currentTimeMillis();
-                            mVideoStartPts = bufferInfo.presentationTimeUs;
-                            mOutputBufferInfo.pollFirst();
-                            mCodec.releaseOutputBuffer(mAvailableOutputBuffers.pollFirst(), true);
+                        //[NOTE]
+                        //-----------CurrentTime0----------------------CurrentTime1---------------------
+                        //-----------presentationTimeUs0--------------presentationTimeUs1-------------
+                        //only render as (presentationTimeUs1 - presentationTimeUs0) <= (CurrentTime1 - CurrentTime0)
+                        if (mStartTimeDiff == 0) {
+                            //sync the first got frame to current time and render it
+                            MediaCodec.BufferInfo bufferInfo = mOutputBufferInfo.get(0);
+                            mStartTimeDiff = System.currentTimeMillis() - bufferInfo.presentationTimeUs;
+                            mCodec.releaseOutputBuffer(mAvailableOutputBuffers.get(0), true);
+                            mAvailableOutputBuffers.remove(0);
+                            mOutputBufferInfo.remove(0);
                         } else {
-                            //check the time stamp
-                            long ptsDiff = bufferInfo.presentationTimeUs - mVideoStartPts;
-                            long currentTimeDiff = System.currentTimeMillis() - mVideoStartCurrtTime;
-                            if (ptsDiff <= currentTimeDiff) {
-                                mOutputBufferInfo.pollFirst();
-                                mCodec.releaseOutputBuffer(mAvailableOutputBuffers.pollFirst(), true);
+                            //check the time stamp is ready to render
+                            int smallerTimeIndex = -1;
+                            long smallerPts = 0;
+                            for (int i=0; i<mAvailableOutputBuffers.size(); i++) {
+                                MediaCodec.BufferInfo bufInfo = mOutputBufferInfo.get(i);
+                                //Log.d(TAG, String.format("[qqq]presentationTimeUs(%d)=%d", i, bufferInfo.presentationTimeUs));
+                                if (smallerPts == 0) {
+                                    smallerTimeIndex = i;
+                                    smallerPts = bufInfo.presentationTimeUs;
+                                } else {
+                                    if (bufInfo.presentationTimeUs < smallerPts) {
+                                        smallerTimeIndex = i;
+                                        smallerPts = bufInfo.presentationTimeUs;
+                                    }
+                                }
+                            }
+                            if (smallerTimeIndex != 0) {
+                                Log.d(TAG, "[qqq]smallerTimeIndex=" + smallerTimeIndex + ", smallerPts=" + smallerPts);
+                            }
+
+                            MediaCodec.BufferInfo bufferInfo = mOutputBufferInfo.get(0);
+                            long renderTime = bufferInfo.presentationTimeUs + mStartTimeDiff;
+                            long currentTime = System.currentTimeMillis();
+                            if (renderTime <= currentTime) {
+                                mCodec.releaseOutputBuffer(mAvailableOutputBuffers.get(0), true);
+                                mAvailableOutputBuffers.remove(0);
+                                mOutputBufferInfo.remove(0);
                             } else {
-                                Log.d(TAG, String.format("runDecodeLoop(): ptsDiff=%d, currentTimeDiff=%d", ptsDiff, currentTimeDiff));
+                                //if (DEBUG)
+                                if (renderTime <= (currentTime + 10))
+                                {
+                                    Log.d(TAG, "runDecodeLoop(): renderTime=" + renderTime +
+                                                      ", currentTime=" + currentTime +
+                                                      ", mAvailableOutputBuffers.size()=" + mAvailableOutputBuffers.size() +
+                                                      ", presentationTimeUs=" + bufferInfo.presentationTimeUs);
+                                }
                             }
                         }
                     }
@@ -611,9 +638,10 @@ class TunerHalControl {
                 ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
                 MediaEvent me = mVideoEventQueue.pollFirst();
 
-                if (DEBUG) {
-                    Log.d(TAG, String.format("runDecodeLoop(): getAvDataId()=%d, getDataLength()=%d, getPts()=%d (%d)",
-                                                            me.getAvDataId(), me.getDataLength(), me.getPts(), me.getPts()/90));
+                //if (DEBUG)
+                {
+                    Log.d(TAG, String.format("runDecodeLoop(): getAvDataId()=%d, getDataLength()=%d, getPts()=0x%x - %d (%d)",
+                                    me.getAvDataId(), me.getDataLength(), me.getPts(), me.getPts(), me.getPts()/90));
                 }
                 //fill codec input buffer
                 inputBuffer.clear();
@@ -622,12 +650,6 @@ class TunerHalControl {
 
                 //release ion buffer
                 me.getLinearBlock().recycle();
-                me.release();
-            }
-
-            //decode thread stop, clear not used media event
-            for (int i=0; i < mVideoEventQueue.size(); i++) {
-                MediaEvent me = mVideoEventQueue.pollFirst();
                 me.release();
             }
         }
