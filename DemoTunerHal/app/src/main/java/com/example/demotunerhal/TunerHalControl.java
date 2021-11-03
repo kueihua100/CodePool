@@ -36,8 +36,10 @@ import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 class TunerHalControl {
     private static final String TAG = "DemoTunerHal-ctrl";
@@ -658,7 +660,7 @@ class TunerHalControl {
             private static final boolean DEBUG = false;
 
             //[NOTE] Needs to set sepolicy as permissive: setenforce 0
-            private static final String PATH_TO_TV_CONFIG_XML =  "/data/local/tmp/tvProgramConfig.xml";
+            private static final String PATH_TO_TV_CONFIG_XML =  "/tmp/tv_program_config.xml";
             public int mTunerFrequency = 195000000;
             public int mVideoPid = 481;
             public String mVideoFormat = MediaFormat.MIMETYPE_VIDEO_MPEG2;
@@ -682,18 +684,40 @@ class TunerHalControl {
             }
 
             public void parse() {
-                File file = new File(PATH_TO_TV_CONFIG_XML);
-                if (file.exists()) {
+                File targetFile = new File(PATH_TO_TV_CONFIG_XML);
+                if (targetFile.exists() == false) {
+                    Log.i(TAG, "No tv program config file:" + PATH_TO_TV_CONFIG_XML + ", copy default setting!! ");
                     try {
-                        InputStream in = new FileInputStream(file);
+                        //[NOTE] Below acess needs to set "permissive: mode: setenforce 0
+                        OutputStream out = new FileOutputStream(targetFile);
+
+                        String string =  String.format("<?xml version=\"1.0\" encoding=\"UTF-8\"?> \n");
+                        out.write(string.getBytes());
+                        string =  String.format("<config version=\"1.0\" xmlns:xi=\"http://www.w3.org/2001/XMLSchema\"> \n");
+                        out.write(string.getBytes());
+                        string =  String.format("    <Tuner frequency=\"195000000\" /> \n");
+                        out.write(string.getBytes());
+                        string =  String.format("    <Video pid=\"481\" format=\"video/mpeg2\" width=\"1920\" height=\"1080\" filterBuffer=\"2097152\" freeRun=\"1\" /> \n");
+                        out.write(string.getBytes());
+                        string =  String.format("    <Audio pid=\"484\" format=\"audio/ac3\" filterBuffer=\"2097152\" /> \n");
+                        out.write(string.getBytes());
+                        string =  String.format("</config> \n");
+                        out.write(string.getBytes());
+                    } catch (IOException e) {
+                        Log.e(TAG, "Failed to copy source file: " + targetFile, e);
+                    }
+                }
+
+                if (targetFile.exists() == true) {
+                    //start parsing
+                    try {
+                        InputStream in = new FileInputStream(targetFile);
                         parseInternal(in);
                     } catch (IOException e) {
-                        Log.e(TAG, "Error reading file: " + file, e);
+                        Log.e(TAG, "Error reading file: " + targetFile, e);
                     } catch (XmlPullParserException e) {
-                        Log.e(TAG, "Unable to parse file: " + file, e);
+                        Log.e(TAG, "Unable to parse file: " + targetFile, e);
                     }
-                } else {
-                    Log.i(TAG, "No tv program config file,  using default setting: ");
                 }
 
                 String string = String.format("Tuner (frequency=%d)", mTunerFrequency);
