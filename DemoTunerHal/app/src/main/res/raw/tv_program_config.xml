@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config version="1.0" xmlns:xi="http://www.w3.org/2001/XMLSchema">
+    <Tuner frequency="195000000" />
+    <Video pid="17" format="video/mpeg2" width="1920" height="1080" filterBuffer="2097152" freeRun="1" />
+    <Audio pid="20" format="audio/ac3" filterBuffer="2097152" />
+</config>
