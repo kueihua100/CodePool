@@ -2,9 +2,9 @@ C      = gcc
 CFLAGS  += -g -MD -Wall -I. -I../../include -D_FILE_OFFSET_BITS=64 $(CPPFLAGS)
 LDFLAGS  += -lc
 
-OBJS = esvideompeg2info.o
-TARGET = esvideompeg2info
-DESTDIR ?= /usr/local/bin/
+OBJS = ts2videoinfo.o
+TARGET = ts2videoinfo
+DESTDIR ?= ~/bin_duncan/
 
 all: $(TARGET)
 
