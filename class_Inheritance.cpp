@@ -58,13 +58,37 @@ void AFilter::start() {
     std::cout << "start(D222):" << "type=" << type <<"\n";
 }
 
+class BFilter: public Filter {
+  public:
+    BFilter(){};
+    BFilter(int in);
+    virtual void start() override;
+  private:
+    ~BFilter();
+    int type;    
+};
+BFilter::BFilter(int in) {
+    std::cout << "BFilter(D222) \n";
+    type = in;
+}
+BFilter::~BFilter() {
+    std::cout << "~BFilter(D222) \n";
+}
+void BFilter::start() {
+    std::cout << "start(D222):" << "type=" << type <<"\n";
+}
+
 int main()
 {
     Filter* aFilter = new AFilter(222);
     aFilter->start();
     
+    Filter* bFilter = new BFilter(222);
+    bFilter->start();
+    
     Filter* filter = new Filter(111);
     filter->start();
     delete aFilter;
+    delete bFilter;
     delete filter;
 }
