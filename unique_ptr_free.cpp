@@ -20,20 +20,36 @@ class BBB {
     std::unique_ptr<AAA> mAAAPtr;
 };
  
+class CCC {
+  public :
+    CCC() {
+        std::cout << "CCC()\n";
+    }
+    ~CCC() {
+        std::cout << "~CCC()\n";
+    }
+    AAA mAAA;
+};
 
 int main()
 {
     {
-        std::cout << "CASE 1:\n";
+        std::cout << "\nCASE 1:\n";
         BBB* pBBB = new BBB();
         std::cout << "delete BBB ptr\n";
         delete pBBB;
         pBBB = nullptr;
+        std::cout << "CASE 1 Out\n\n";
     }
     {
-        std::cout << "CASE 2:\n";
+        std::cout << "\nCASE 2 In:\n";
         std::unique_ptr<BBB> pBBBPtr = std::make_unique<BBB>();
-        std::cout << "exit BBB scope\n";
+        std::cout << "CASE 2 Out\n\n";
+    }
+    {
+        std::cout << "\nCASE 3 In:\n";
+        CCC ccc;
+        std::cout << "CASE 3 Out\n\n";
     }
     std::cout << "do you see me??\n";
 }

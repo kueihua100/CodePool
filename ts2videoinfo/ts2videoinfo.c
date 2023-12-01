@@ -13,7 +13,6 @@
 #define TS_PACKET_SIZE  (188)
 #define TS_EXTRA_SIZE (4)
 #define NEW_TS_PACKET_SIZE (TS_PACKET_SIZE + TS_EXTRA_SIZE)
-#define MAX_PID 8192
 #define PES_PACKET_SIZE (3*1024*1024)
 
 #define GET_PID(p)            (((((int)p[1]) & 0x1F) << 8) | p[2])
@@ -98,11 +97,11 @@ int main(int argc, char *argv[])
         }
 
         payload_pid = atoi(argv[2]);
-        if (payload_pid < 2 || payload_pid > MAX_PID-2) {
+        if (payload_pid < 2 || payload_pid > 0x1FFE) {
             fprintf(stderr, "Invalid PID, range is [2..8190]\n");
         }
     } else {
-        fprintf(stderr, "Usage: 'ts2pes filename.ts payload_pid '\n");
+        fprintf(stderr, "Usage: 'ts2videoinfo xxx.ts pid '\n");
         return 2;
     }
 
