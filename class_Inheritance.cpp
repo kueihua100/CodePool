@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 
 class IFilter {
   public:
@@ -35,16 +36,16 @@ Filter::~Filter() {
     std::cout << "~Filter(D111) \n";
 }
 void Filter::start() {
-    std::cout << "start(D111):" << "type=" << type <<"\n";
+    std::cout << "Filter::start(D111):" << "type=" << type <<"\n";
 }
 
 class AFilter: public Filter {
   public:
     AFilter(){};
     AFilter(int in);
-    virtual void start() override;
-  private:
     ~AFilter();
+    void start();
+  private:
     int type;    
 };
 AFilter::AFilter(int in) {
@@ -55,16 +56,17 @@ AFilter::~AFilter() {
     std::cout << "~AFilter(D222) \n";
 }
 void AFilter::start() {
-    std::cout << "start(D222):" << "type=" << type <<"\n";
+    Filter::start();
+    std::cout << "AFilter::start(D222):" << "type=" << type <<"\n";
 }
 
 class BFilter: public Filter {
   public:
     BFilter(){};
     BFilter(int in);
-    virtual void start() override;
-  private:
     ~BFilter();
+    //virtual void start() override;
+  private:
     int type;    
 };
 BFilter::BFilter(int in) {
@@ -74,21 +76,25 @@ BFilter::BFilter(int in) {
 BFilter::~BFilter() {
     std::cout << "~BFilter(D222) \n";
 }
+/*
 void BFilter::start() {
-    std::cout << "start(D222):" << "type=" << type <<"\n";
-}
+    std::cout << "BFilter::start(D222):" << "type=" << type <<"\n";
+}*/
 
 int main()
 {
-    Filter* aFilter = new AFilter(222);
+    //Filter* aFilter = new AFilter(222);
+    std::unique_ptr<Filter> aFilter = std::make_unique<AFilter>();
     aFilter->start();
     
-    Filter* bFilter = new BFilter(222);
+    //Filter* bFilter = new BFilter(222);
+    std::unique_ptr<Filter> bFilter = std::make_unique<BFilter>();
     bFilter->start();
     
-    Filter* filter = new Filter(111);
+    //Filter* filter = new Filter(111);
+    std::unique_ptr<Filter> filter = std::make_unique<Filter>();
     filter->start();
-    delete aFilter;
-    delete bFilter;
-    delete filter;
+    //delete aFilter;
+    //delete bFilter;
+    //delete filter;
 }
