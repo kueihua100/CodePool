@@ -44,6 +44,8 @@ int main()
     {
         std::cout << "\nCASE 2 In:\n";
         std::unique_ptr<BBB> pBBBPtr = std::make_unique<BBB>();
+        //pBBBPtr.reset();
+        pBBBPtr = nullptr;
         std::cout << "CASE 2 Out\n\n";
     }
     {
