@@ -44,14 +44,18 @@ int main()
     {
         std::cout << "\nCASE 2 In:\n";
         std::unique_ptr<BBB> pBBBPtr = std::make_unique<BBB>();
-        //pBBBPtr.reset();
-        pBBBPtr = nullptr;
         std::cout << "CASE 2 Out\n\n";
     }
     {
         std::cout << "\nCASE 3 In:\n";
-        CCC ccc;
+        std::unique_ptr<BBB> pBBBPtr = std::make_unique<BBB>();
+        pBBBPtr.reset(); // equals using: pBBBPtr = nullptr;
         std::cout << "CASE 3 Out\n\n";
+    } 
+    {
+        std::cout << "\nCASE 4 In:\n";
+        CCC ccc;
+        std::cout << "CASE 4 Out\n\n";
     }
     std::cout << "do you see me??\n";
 }
