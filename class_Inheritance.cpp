@@ -27,20 +27,21 @@ class Filter : public IFilter {
     virtual void start() override;
     void start1();
   private:
-    int type;
+    int filter_type;
 };
 Filter::Filter(int in) {
     std::cout << "Filter(D111) \n";
-    type = in;
+    filter_type = in;
+    std::cout << "Filter()::" << "in=" << in <<"\n";
 }
 Filter::~Filter() {
     std::cout << "~Filter(D111) \n";
 }
 void Filter::start() {
-    std::cout << "Filter::start(D111):" << "type=" << type <<"\n";
+    std::cout << "Filter::start(D111):" << "filter_type=" << filter_type <<"\n";
 }
 void Filter::start1() {
-    std::cout << "Filter::start1111(D111):" << "type=" << type <<"\n";
+    std::cout << "Filter::start1111(D111):" << "filter_type=" << filter_type <<"\n";
 }
 
 class AFilter: public Filter {
@@ -50,18 +51,19 @@ class AFilter: public Filter {
     ~AFilter();
     void start();
   private:
-    int type;    
+    int aFilter_type;    
 };
 AFilter::AFilter(int in) {
     std::cout << "AFilter(D222) \n";
-    type = in;
+    aFilter_type = in;
+    std::cout << "AFilter()::" << "in=" << in <<"\n";
 }
 AFilter::~AFilter() {
     std::cout << "~AFilter(D222) \n";
 }
 void AFilter::start() {
     Filter::start();
-    std::cout << "AFilter::start(D222):" << "type=" << type <<"\n";
+    std::cout << "AFilter::start(D222):" << "aFilter_type=" << aFilter_type <<"\n";
 }
 
 class BFilter: public Filter {
@@ -71,29 +73,30 @@ class BFilter: public Filter {
     ~BFilter();
     //virtual void start() override;
   private:
-    int type;    
+    int bFilter_type;    
 };
 BFilter::BFilter(int in) {
     std::cout << "BFilter(D222) \n";
-    type = in;
+    bFilter_type = in;
+    std::cout << "BFilter()::" << "in=" << in <<"\n";
 }
 BFilter::~BFilter() {
     std::cout << "~BFilter(D222) \n";
 }
 /*
 void BFilter::start() {
-    std::cout << "BFilter::start(D222):" << "type=" << type <<"\n";
+    std::cout << "BFilter::start(D222):" << "bFilter_type=" << bFilter_type <<"\n";
 }*/
 
 int main()
 {
     //Filter* aFilter = new AFilter(222);
-    std::unique_ptr<Filter> aFilter = std::make_unique<AFilter>();
+    std::unique_ptr<Filter> aFilter = std::make_unique<AFilter>(3);
     aFilter->start();
     aFilter->start1();
     
     //Filter* bFilter = new BFilter(222);
-    std::unique_ptr<Filter> bFilter = std::make_unique<BFilter>();
+    std::unique_ptr<Filter> bFilter = std::make_unique<BFilter>(4);
     bFilter->start();
     
     //Filter* filter = new Filter(111);
