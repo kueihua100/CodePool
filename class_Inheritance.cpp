@@ -25,6 +25,7 @@ class Filter : public IFilter {
     Filter(int in);
     virtual ~Filter();
     virtual void start() override;
+    void start1();
   private:
     int type;
 };
@@ -37,6 +38,9 @@ Filter::~Filter() {
 }
 void Filter::start() {
     std::cout << "Filter::start(D111):" << "type=" << type <<"\n";
+}
+void Filter::start1() {
+    std::cout << "Filter::start1111(D111):" << "type=" << type <<"\n";
 }
 
 class AFilter: public Filter {
@@ -86,6 +90,7 @@ int main()
     //Filter* aFilter = new AFilter(222);
     std::unique_ptr<Filter> aFilter = std::make_unique<AFilter>();
     aFilter->start();
+    aFilter->start1();
     
     //Filter* bFilter = new BFilter(222);
     std::unique_ptr<Filter> bFilter = std::make_unique<BFilter>();
