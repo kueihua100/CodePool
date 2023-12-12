@@ -26,7 +26,7 @@ class Filter : public IFilter {
     virtual ~Filter();
     virtual void start() override;
     void start1();
-  private:
+  protected:
     int filter_type;
 };
 Filter::Filter(int in) {
@@ -55,6 +55,7 @@ class AFilter: public Filter {
 };
 AFilter::AFilter(int in) {
     std::cout << "AFilter(D222) \n";
+    filter_type = in -1;
     aFilter_type = in;
     std::cout << "AFilter()::" << "in=" << in <<"\n";
 }
@@ -63,6 +64,7 @@ AFilter::~AFilter() {
 }
 void AFilter::start() {
     Filter::start();
+    std::cout << "AFilter::start(D222):" << "filter_type=" << filter_type <<"\n";
     std::cout << "AFilter::start(D222):" << "aFilter_type=" << aFilter_type <<"\n";
 }
 
