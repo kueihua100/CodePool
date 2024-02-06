@@ -49,7 +49,7 @@ int main()
     {
         std::cout << "\nCASE 3 In:\n";
         std::unique_ptr<BBB> pBBBPtr = std::make_unique<BBB>();
-        pBBBPtr.reset(); // equals using: pBBBPtr = nullptr;
+        pBBBPtr.reset(nullptr); // equals using: pBBBPtr = nullptr;
         std::cout << "CASE 3 Out\n\n";
     } 
     {
