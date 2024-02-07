@@ -23,16 +23,25 @@ class BBB {
 class CCC {
   public :
     CCC() {
+        ma = 0;
         std::cout << "CCC()\n";
     }
+    CCC(int a) {
+        ma = a;
+        std::cout << "CCC() ma=" << a << "\n";
+    }
     ~CCC() {
-        std::cout << "~CCC()\n";
+        std::cout << "~CCC() ma=" << ma << "\n";
     }
     AAA mAAA;
+    int ma;
 };
 
 int main()
 {
+    std::cout << "\n-----------------\n";
+    CCC mCCC;
+    std::cout << "\n-----------------\n";
     {
         std::cout << "\nCASE 1:\n";
         BBB* pBBB = new BBB();
@@ -54,8 +63,10 @@ int main()
     } 
     {
         std::cout << "\nCASE 4 In:\n";
-        CCC ccc;
+        mCCC = CCC(1);
+        mCCC = CCC(2);
         std::cout << "CASE 4 Out\n\n";
+        
     }
     std::cout << "do you see me??\n";
 }
