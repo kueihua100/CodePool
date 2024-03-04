@@ -90,6 +90,25 @@ void BFilter::start() {
     std::cout << "BFilter::start(D222):" << "bFilter_type=" << bFilter_type <<"\n";
 }*/
 
+class CFilter: public Filter {
+  public:
+    CFilter(){};
+    CFilter(int in);
+    ~CFilter();
+    //virtual void start() override;
+  private:
+    int bFilter_type;    
+};
+
+CFilter::CFilter(int in) : Filter(in) {
+    std::cout << "CFilter(D333) \n";
+    bFilter_type = in;
+    std::cout << "CFilter()::" << "in=" << in <<"\n";
+}
+CFilter::~CFilter() {
+    std::cout << "~CFilter(D333) \n";
+}
+
 int main()
 {
     //Filter* aFilter = new AFilter(222);
@@ -107,4 +126,6 @@ int main()
     //delete aFilter;
     //delete bFilter;
     //delete filter;
+    std::unique_ptr<Filter> cFilter = std::make_unique<CFilter>(9);
+    
 }
