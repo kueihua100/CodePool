@@ -115,6 +115,7 @@ int main()
     std::unique_ptr<Filter> aFilter = std::make_unique<AFilter>(3);
     aFilter->start();
     aFilter->start1();
+    aFilter.reset();
     
     //Filter* bFilter = new BFilter(222);
     std::unique_ptr<Filter> bFilter = std::make_unique<BFilter>(4);
